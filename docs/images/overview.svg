@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 360" width="900" role="img" aria-labelledby="t d">
+  <title id="t">Magi overview</title>
+  <desc id="d">Claude Code, Codex CLI and Oh My Pi each load one Magi MCP server. Magi routes requests to a live peer session or a headless fallback, and records every exchange in a shared ledger.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5b6472"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2933; }
+      .h { font-size: 17px; font-weight: 700; }
+      .s { font-size: 13px; fill: #4a5563; }
+      .t { font-size: 12px; fill: #5b6472; }
+      .box { fill: #ffffff; stroke: #5b6472; stroke-width: 1.5; }
+      .core { fill: #eef2ff; stroke: #4f46e5; stroke-width: 2; }
+      .store { fill: #f4f4f5; stroke: #5b6472; stroke-width: 1.5; }
+      .line { stroke: #5b6472; stroke-width: 1.8; fill: none; }
+    </style>
+  </defs>
+  <rect width="900" height="360" rx="12" fill="#fafafa" stroke="#d4d4d8"/>
+
+  <g>
+    <rect class="box" x="40" y="30" width="230" height="74" rx="10"/>
+    <text class="h" x="155" y="62" text-anchor="middle">Claude Code</text>
+    <text class="s" x="155" y="84" text-anchor="middle">orchestrates or answers</text>
+    <rect class="box" x="335" y="30" width="230" height="74" rx="10"/>
+    <text class="h" x="450" y="62" text-anchor="middle">Codex CLI</text>
+    <text class="s" x="450" y="84" text-anchor="middle">orchestrates or answers</text>
+    <rect class="box" x="630" y="30" width="230" height="74" rx="10"/>
+    <text class="h" x="745" y="62" text-anchor="middle">Oh My Pi</text>
+    <text class="s" x="745" y="84" text-anchor="middle">orchestrates or answers</text>
+  </g>
+
+  <path class="line" d="M155 104 V166" marker-start="url(#a)" marker-end="url(#a)"/>
+  <path class="line" d="M450 104 V166" marker-start="url(#a)" marker-end="url(#a)"/>
+  <path class="line" d="M745 104 V166" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text class="t" x="165" y="140">MCP tool</text>
+  <text class="t" x="460" y="140">MCP tool</text>
+  <text class="t" x="755" y="140">MCP tool</text>
+
+  <rect class="core" x="40" y="170" width="820" height="84" rx="12"/>
+  <text class="h" x="450" y="202" text-anchor="middle">Magi: one MCP server per session</text>
+  <text class="s" x="450" y="226" text-anchor="middle">pinned diffs · independent first passes · bounded rounds · reconciliation · shared memory</text>
+  <text class="t" x="450" y="244" text-anchor="middle">a live session if one is working in the directory, a restricted headless process if not</text>
+
+  <path class="line" d="M450 254 V296" marker-end="url(#a)"/>
+  <rect class="store" x="230" y="298" width="440" height="42" rx="8"/>
+  <text class="s" x="450" y="324" text-anchor="middle">~/.magi: ledger, exchanges, notes, memory banks</text>
+</svg>

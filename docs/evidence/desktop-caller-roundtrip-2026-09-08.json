@@ -1,0 +1,17 @@
+{
+  "taskId": "cx-0a43108e",
+  "fromArgumentSupplied": false,
+  "expectedCallerId": "01a080a3-16b5-7f01-8d56-936c04be5504",
+  "recordedCaller": "01a080a3-16b5-7f01-8d56-936c04be5504",
+  "recordedReplyTo": "codex:01a080a3-16b5-7f01-8d56-936c04be5504",
+  "peerSessionId": "87fcbc3f-2b51-424d-b1a2-33b7efa1e000",
+  "peerRegistryName": "magi-75",
+  "peerReplied": true,
+  "replyRound": 1,
+  "replySender": "claude",
+  "receiptText": "SUMMARY\nRECEIVED-POST-RESTART. My session id is 87fcbc3f-2b51-424d-b1a2-33b7efa1e000 (registry name magi-75, pid 50328). The Codex sender shown in this request is id=01a080a3-16b5-7f01-8d56-936c04be5504, name \"Start Magi audit\". The request arrived live through the socket and I am answering through the normal codex_peer kind=\"reply\" path; nothing on disk was modified for this check.",
+  "headAtRequest": "2e43a998602c8d51ee2c6080ef57b103f975b407",
+  "scope": "Native desktop MCP caller identity, live Claude request receipt, durable peer reply and subsequent receipt in the Codex conversation. Sender-envelope attributes remain a separate validation.",
+  "replyObservedInCodexConversation": true,
+  "receiptObservation": "The receiving Codex conversation subsequently received the matching PEER REPLY for cx-0a43108e round 1."
+}

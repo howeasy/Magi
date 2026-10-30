@@ -1,0 +1,15 @@
+node_modules/
+scratch/
+
+# Written by Claude Code for the editor when it loads the mod.
+claude-mod/.claude-plugin/types/
+claude-mod/tsconfig.json
+
+# Written by magi install: where this checkout is, for the cached copy of the mod.
+claude-mod/checkout.json
+
+# Written by the mod: what its peer-row hook decided for the last rows.
+claude-mod/render-trace.json
+
+# Local Claude Code state: worktrees, local permissions, scratch patches.
+.claude/

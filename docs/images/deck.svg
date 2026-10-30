@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" role="img" aria-labelledby="t d">
+  <title id="t">The /magi deck</title>
+  <desc id="d">An illustration of the /magi deck in Claude Code with sample data: what waits on you, the three units MELCHIOR-1, BALTHASAR-2 and CASPER-3 with a card moving between two of them, the agents working on cards, the last messages threaded by card, a seven-day ledger, the providers, and the status line.</desc>
+  <defs>
+    <style>
+      text { font-family: "Cascadia Mono", "0xProto Nerd Font Mono", "SF Mono", Consolas, "Courier New", monospace; font-size: 13px; fill: #cfd3dc; }
+      .dim { fill: #7c8294; }
+      .pu { fill: #8a5cf6; }
+      .gn { fill: #39ff14; }
+      .am { fill: #ffb000; }
+      .rd { fill: #ff2a2a; }
+      .or { fill: #ff6a00; }
+      .hd { fill: #8a5cf6; font-weight: 700; letter-spacing: 2px; }
+      .fr { fill: none; stroke: #8a5cf6; stroke-width: 1.5; }
+      .ln { stroke: #8a5cf6; stroke-opacity: 0.35; stroke-width: 1; }
+      .kj { fill: #7c8294; font-size: 11px; }
+    </style>
+    <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#ffb000"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="600" rx="10" fill="#0b0b12"/>
+  <rect x="0.75" y="0.75" width="898.5" height="598.5" rx="10" fill="none" stroke="#2a2a3a"/>
+
+  <!-- title bar -->
+  <text x="24" y="34" class="or" style="font-size:16px">◢◤◢◤</text>
+  <text x="84" y="34" class="hd" style="font-size:16px">MAGI</text>
+  <text x="150" y="34" class="kj">交信</text>
+  <text x="876" y="34" class="dim" text-anchor="end">last 7 days · this machine</text>
+  <path class="ln" d="M24 48H876"/>
+
+  <!-- waiting on you -->
+  <text x="24" y="76" class="hd">WAITING ON YOU</text>
+  <text x="24" y="98" class="am">▎</text>
+  <text x="42" y="98">omp "api-refactor" is blocked on a permission prompt</text>
+  <text x="876" y="98" class="am" text-anchor="end">12 min</text>
+  <text x="24" y="118" class="am">▎</text>
+  <text x="42" y="118">2 findings from codex are unreconciled on card magi-3f2a</text>
+  <path class="ln" d="M24 134H876"/>
+
+  <!-- triad -->
+  <text x="24" y="162" class="hd">UNITS</text>
+  <rect class="fr" x="56" y="176" width="220" height="92"/>
+  <rect class="fr" x="340" y="176" width="220" height="92"/>
+  <rect class="fr" x="624" y="176" width="220" height="92"/>
+  <text x="70" y="198" class="pu" style="font-weight:700">MELCHIOR-1</text>
+  <text x="70" y="218">claude</text>
+  <text x="70" y="238" class="gn">● 2 live · 1 working</text>
+  <text x="70" y="256" class="dim">1 open card</text>
+  <text x="354" y="198" class="pu" style="font-weight:700">BALTHASAR-2</text>
+  <text x="354" y="218">codex</text>
+  <text x="354" y="238" class="gn">● 1 live · 1 working</text>
+  <text x="354" y="256" class="dim">1 open card</text>
+  <text x="638" y="198" class="pu" style="font-weight:700">CASPER-3</text>
+  <text x="638" y="218">omp</text>
+  <text x="638" y="238" class="am">● 1 live · blocked</text>
+  <text x="638" y="256" class="dim">0 open cards</text>
+  <path d="M276 212H336" stroke="#ffb000" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="283" y="204" class="am" style="font-size:11px">REVIEW</text>
+  <path class="ln" d="M24 288H876"/>
+
+  <!-- working -->
+  <text x="24" y="316" class="hd">WORKING</text>
+  <text x="24" y="338" class="gn">▎</text>
+  <text x="42" y="338">codex "review-pass"</text>
+  <text x="250" y="338" class="dim">for claude "billing-fix" · REVIEW · round 1</text>
+  <text x="24" y="358" class="gn">▎</text>
+  <text x="42" y="358">omp worker (headless)</text>
+  <text x="250" y="358" class="dim">for claude "billing-fix" · DELEGATE · advisor on</text>
+  <path class="ln" d="M24 374H876"/>
+
+  <!-- messages -->
+  <text x="24" y="402" class="hd">MESSAGES</text>
+  <text x="24" y="424" class="am">▎</text>
+  <text x="42" y="424">Request to codex</text>
+  <text x="250" y="424" class="dim">magi-3f2a · round 1 · diff pinned · delivered live</text>
+  <text x="24" y="444" class="gn">▎</text>
+  <text x="42" y="444">Reply from codex</text>
+  <text x="250" y="444" class="dim">magi-3f2a · round 1 · 3 findings with file:line</text>
+  <text x="24" y="464" class="pu">▎</text>
+  <text x="42" y="464">Note to omp</text>
+  <text x="250" y="464" class="dim">magi-91c0 · "the fixture is in test/data"</text>
+  <path class="ln" d="M24 480H876"/>
+
+  <!-- ledger -->
+  <text x="24" y="508" class="hd">LEDGER</text>
+  <text x="130" y="508" class="dim">requests per day, by direction</text>
+  <g fill="#8a5cf6">
+    <rect x="42" y="528" width="30" height="14"/><rect x="42" y="544" width="30" height="8" fill="#39ff14"/>
+    <rect x="138" y="520" width="30" height="22"/><rect x="138" y="544" width="30" height="12" fill="#39ff14"/>
+    <rect x="234" y="534" width="30" height="8"/><rect x="234" y="544" width="30" height="4" fill="#39ff14"/>
+    <rect x="330" y="512" width="30" height="30"/><rect x="330" y="544" width="30" height="16" fill="#39ff14"/>
+    <rect x="426" y="526" width="30" height="16"/><rect x="426" y="544" width="30" height="10" fill="#39ff14"/>
+    <rect x="522" y="536" width="30" height="6"/><rect x="522" y="544" width="30" height="6" fill="#39ff14"/>
+    <rect x="618" y="518" width="30" height="24"/><rect x="618" y="544" width="30" height="14" fill="#39ff14"/>
+  </g>
+  <text x="700" y="528" class="dim">claude asked</text>
+  <rect x="682" y="519" width="10" height="10" fill="#8a5cf6"/>
+  <text x="700" y="548" class="dim">peers asked</text>
+  <rect x="682" y="539" width="10" height="10" fill="#39ff14"/>
+
+  <!-- status line -->
+  <path class="ln" d="M24 572H876"/>
+  <text x="24" y="591" class="dim">Magi: claude <tspan class="gn">✓</tspan> · codex <tspan class="gn">✓</tspan> · omp <tspan class="am">!</tspan> · 1 working here</text>
+</svg>

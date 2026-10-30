@@ -1,0 +1,34 @@
+{
+  "name": "magi",
+  "version": "0.1.0",
+  "description": "Peer collaboration between Claude Code, Codex CLI and Oh My Pi over MCP, with a shared ledger and evidence-first reviews",
+  "license": "MIT",
+  "author": "howeasy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/howeasy/Magi.git"
+  },
+  "homepage": "https://github.com/howeasy/Magi#readme",
+  "bugs": {
+    "url": "https://github.com/howeasy/Magi/issues"
+  },
+  "keywords": ["mcp", "claude-code", "codex", "oh-my-pi", "code-review", "agents"],
+  "type": "module",
+  "bin": {
+    "magi": "./bin/magi.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^3.25.0"
+  },
+  "scripts": {
+    "test": "node --import ./test/helpers/isolated-home.mjs --test \"test/**/*.test.mjs\"",
+    "posttest": "node test/helpers/temp-sweep.mjs",
+    "test:e2e": "node --import ./test/helpers/isolated-home.mjs --test \"test/**/*.test.mjs\"",
+    "posttest:e2e": "node test/helpers/temp-sweep.mjs"
+  }
+}

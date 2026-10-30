@@ -1,0 +1,4 @@
+{
+  "description": "Magi drawings: ui.render on peer UserMessage rows, Magi ToolUse rows, the AbovePrompt alert band and the magi deck Pane (the MAGI triad as an Svg on vector surfaces; the pulse.tsx, elapsed.tsx and bus.tsx surface modules move the rest); tool.call on the Magi peer tools (observed, never altered); /magi, /magi-working and /magi-theme; provider Enable/Disable run magi provider.",
+  "modules": ["./register.ts"]
+}

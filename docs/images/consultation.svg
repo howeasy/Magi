@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 270" width="900" role="img" aria-labelledby="t d">
+  <title id="t">How a Magi consultation runs</title>
+  <desc id="d">Five stages left to right: you ask in plain words; the peer reviews independently without your findings; it replies with findings and file and line evidence; you reconcile each finding against the source into accepted, rejected or open; the verdict is recorded in the ledger.</desc>
+  <defs>
+    <pattern id="hz" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="12" fill="#ff8a00" opacity="0.16"/>
+    </pattern>
+    <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#ff8a00"/>
+    </marker>
+    <style>
+      .n { font-family: Georgia, "Times New Roman", serif; font-weight: 700; fill: #ff8a00; font-size: 30px; }
+      .h { font-family: Arial, Helvetica, sans-serif; font-weight: 700; fill: #46b3da; font-size: 15px; letter-spacing: 1px; }
+      .b { font-family: Arial, Helvetica, sans-serif; fill: #d8e6ec; font-size: 12.5px; }
+      .m { font-family: "Courier New", Consolas, monospace; fill: #ff8a00; font-size: 11px; }
+      .k { font-family: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif CJK JP", "MS Mincho", serif; font-weight: 900; fill: #ff8a00; font-size: 13px; letter-spacing: 3px; }
+    </style>
+  </defs>
+  <rect width="900" height="270" fill="#000"/>
+  <rect x="2" y="2" width="896" height="266" fill="url(#hz)"/>
+  <rect x="2" y="2" width="896" height="266" fill="none" stroke="#ff8a00" stroke-width="2"/>
+  <rect x="10" y="10" width="880" height="250" fill="#000" stroke="#ff8a00"/>
+
+  <g id="s1">
+    <rect x="24" y="30" width="150" height="190" fill="#06121a" stroke="#46b3da" stroke-width="1.5"/>
+    <text x="38" y="66" class="n">1</text>
+    <text x="38" y="92" class="h">ASK</text>
+    <text x="38" y="110" class="k">要請</text>
+    <text x="38" y="134" class="b">You say it in plain</text>
+    <text x="38" y="150" class="b">words. The agent</text>
+    <text x="38" y="166" class="b">decides a second</text>
+    <text x="38" y="182" class="b">opinion is worth it.</text>
+    <text x="38" y="208" class="m">mode: REVIEW</text>
+  </g>
+  <g>
+    <rect x="198" y="30" width="150" height="190" fill="#06121a" stroke="#46b3da" stroke-width="1.5"/>
+    <text x="212" y="66" class="n">2</text>
+    <text x="212" y="92" class="h">INDEPENDENT</text>
+    <text x="212" y="110" class="k">独立</text>
+    <text x="212" y="134" class="b">The peer reviews</text>
+    <text x="212" y="150" class="b">without seeing your</text>
+    <text x="212" y="166" class="b">findings, against a</text>
+    <text x="212" y="182" class="b">pinned diff.</text>
+    <text x="212" y="208" class="m">diffRef: HEAD~1</text>
+  </g>
+  <g>
+    <rect x="372" y="30" width="150" height="190" fill="#06121a" stroke="#46b3da" stroke-width="1.5"/>
+    <text x="386" y="66" class="n">3</text>
+    <text x="386" y="92" class="h">REPLY</text>
+    <text x="386" y="110" class="k">回答</text>
+    <text x="386" y="134" class="b">Findings come back</text>
+    <text x="386" y="150" class="b">with evidence. It may</text>
+    <text x="386" y="166" class="b">ask a question first,</text>
+    <text x="386" y="182" class="b">within bounded rounds.</text>
+    <text x="386" y="208" class="m">cite file:line</text>
+  </g>
+  <g>
+    <rect x="546" y="30" width="150" height="190" fill="#06121a" stroke="#ff8a00" stroke-width="2"/>
+    <text x="560" y="66" class="n">4</text>
+    <text x="560" y="92" class="h">RECONCILE</text>
+    <text x="560" y="110" class="k">照合</text>
+    <text x="560" y="134" class="b">You check every</text>
+    <text x="560" y="150" class="b">finding against the</text>
+    <text x="560" y="166" class="b">source. Agreement is</text>
+    <text x="560" y="182" class="b">not a reason.</text>
+    <text x="560" y="208" class="m">3 held · 1 rejected</text>
+  </g>
+  <g>
+    <rect x="720" y="30" width="156" height="190" fill="#06121a" stroke="#46b3da" stroke-width="1.5"/>
+    <text x="734" y="66" class="n">5</text>
+    <text x="734" y="92" class="h">LEDGER</text>
+    <text x="734" y="110" class="k">記録</text>
+    <text x="734" y="134" class="b">The verdict is stored</text>
+    <text x="734" y="150" class="b">under ~/.magi, so</text>
+    <text x="734" y="166" class="b">magi log shows how</text>
+    <text x="734" y="182" class="b">often peers held up.</text>
+    <text x="734" y="208" class="m">$ magi log</text>
+  </g>
+
+  <g stroke="#ff8a00" stroke-width="2.5" fill="none">
+    <path d="M174 125H196" marker-end="url(#ar)"/>
+    <path d="M348 125H370" marker-end="url(#ar)"/>
+    <path d="M522 125H544" marker-end="url(#ar)"/>
+    <path d="M696 125H718" marker-end="url(#ar)"/>
+  </g>
+</svg>

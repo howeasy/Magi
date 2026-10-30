@@ -1,0 +1,11 @@
+interface:
+  name: peer-claude
+  display_name: Peer review with Claude
+  description: >-
+    Need a Claude review, fact check, diagnosis or bounded task, a note or
+    steer to a live Claude session, or to answer a Magi peer request.
+policy:
+  allow_implicit_invocation: true
+dependencies:
+  mcp_servers:
+    - magi

@@ -1,0 +1,7 @@
+{
+  "name": "magi",
+  "owner": { "name": "Magi" },
+  "plugins": [
+    { "name": "magi-view", "source": "./claude-mod", "description": "Shows Magi peer traffic in plain words: peer messages without their protocol text, your Magi calls as one line each, and the /magi deck of who is working on what, each card's whole conversation, and the ledger." }
+  ]
+}

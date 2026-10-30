@@ -1,0 +1,34 @@
+{
+  "name": "magi-view",
+  "version": "0.9.1",
+  "description": "Shows Magi peer traffic in plain words: peer messages as a header line (who sent it, which card, which round) over their body without the protocol text, your own Magi tool calls as one line each with their delivery state, the /magi deck (what waits on you first, the MAGI triad of claude, codex and omp with the cards in flight moving between them, every agent working on a card as a two-line row grouped by the session that asked, the last messages threaded by card, a seven-day ledger by direction, the providers and the machines beyond this one with their workers, drawn in a Nerd Font on the desktop; a message that carried files names them), a line above the prompt only while something needs you, and peer presence on the status line. Drawing only: the stored messages and what the model reads are unchanged.",
+  "author": { "name": "Magi" },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "checkout": {
+      "type": "string",
+      "title": "Magi checkout",
+      "description": "The Magi folder holding bin/magi.mjs, for a copy of the mod that does not sit in claude-mod/ of that folder. Empty: the folder above the mod.",
+      "default": ""
+    },
+    "font": {
+      "type": "string",
+      "title": "Deck font",
+      "description": "The monospace the deck's panels are drawn in on the desktop, VS Code and mobile (installed on this machine; a Nerd Font for the icons). The terminal uses its own font.",
+      "default": "0xProto Nerd Font Mono"
+    },
+    "icons": {
+      "type": "boolean",
+      "title": "Nerd Font icons",
+      "description": "Draw the deck's icons with the font's Nerd Font glyphs; off, plain Unicode marks, for a font without them.",
+      "default": true
+    },
+    "openOnStart": {
+      "type": "boolean",
+      "title": "Open the deck on start",
+      "description": "Open the Magi deck when a session starts (Claude Code seats a pane nobody asked for from 144 columns); /magi opens it at any width.",
+      "default": false
+    }
+  }
+}
