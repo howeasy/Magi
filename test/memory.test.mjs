@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, existsSync, realpathSync } from 'node:fs';
 
 import { makeWorkspace } from './helpers/harness.mjs';
 import { database, migrateLegacy } from '../src/store.mjs';
@@ -122,7 +122,9 @@ import { writeFileSync } from 'node:fs';
 import { initGitRepo } from './helpers/harness.mjs';
 
 test('worktrees share a bank; older path banks require explicit migration', async () => {
-  const { ws, mem } = await fresh();
+  const { ws: rawWs, mem } = await fresh();
+  // git reports canonical paths; a CI temp dir can arrive as an 8.3 short name.
+  const ws = realpathSync.native(rawWs);
   const main = join(ws, 'repo');
   mkdirSync(main, { recursive: true });
   initGitRepo(main);
