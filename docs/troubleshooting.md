@@ -16,7 +16,9 @@ this exact failure once after 250 ms, within the original timeout, only when
 no RPC input or note has been sent or queued. It never retries a request
 that may have executed, a cancellation, another SQLite error, or a remote
 worker. A second failure is reported normally. This recovers a transient
-startup failure; it does not repair database corruption. Keep the database
+startup failure; it does not repair database corruption. A replacement worker
+gets a fresh process identity; delayed observations from the failed attempt
+cannot replace it. Keep the database
 and credentials in place and check disk space and SQLite `quick_check`
 before considering a database repair.
 

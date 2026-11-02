@@ -198,9 +198,15 @@ export async function runHeadless(adapter, { text, cwd, allowWrites, allowComman
   }
   // The process spawned for the worker (the wrapper, or the worker itself),
   // recorded off the critical path: on Windows its start time is a slow read.
+  let childGeneration = 0;
+  let recordChildren = true;
   const onSpawn = taskId ? (pid) => {
-    void retryState(() => recordWorkerChild(taskId, { childPid: pid })).catch(() => {});
-    void processStartedAtAsync(pid).then((childStartedAt) => childStartedAt && retryState(() => recordWorkerChild(taskId, { childPid: pid, childStartedAt }))).catch(() => {});
+    const generation = ++childGeneration;
+    // A delayed observation of the failed attempt must not replace the retry's
+    // identity, including when the ledger write itself has to wait for a lock.
+    const record = (fields) => retryState(() => recordChildren && generation === childGeneration ? recordWorkerChild(taskId, fields) : null);
+    void record({ childPid: pid }).catch(() => {});
+    void processStartedAtAsync(pid).then((childStartedAt) => childStartedAt && record({ childPid: pid, childStartedAt })).catch(() => {});
   } : undefined;
   let reply;
   // The temp file that names this run's advisor model; gone when the run is.
@@ -298,6 +304,7 @@ export async function runHeadless(adapter, { text, cwd, allowWrites, allowComman
     }
     throw e;
   } finally {
+    recordChildren = false;
     try { overlay?.cleanup(); } catch { /* sweep removes a leftover */ }
     if (taskId) {
       try { await retryState(() => unregisterWorker(taskId)); }
