@@ -133,7 +133,12 @@ export async function runChannel({ name, spawn, args, text, cwd, env, timeoutMs,
     child.end();
     finishTimer = setTimeout(() => { stopped = true; child.kill(); }, FINISH_GRACE_MS);
   };
-  session = open({ send: child.send, finish, receipt: (id, status) => advance(run, id, status) });
+  let inputSent = false;
+  session = open({ send: (...args) => {
+    // Mark before attempting the write: an uncertain write must never replay.
+    inputSent = true;
+    return child.send(...args);
+  }, finish, receipt: (id, status) => advance(run, id, status) });
   // The orchestrator's stop. Once the answer is complete (finishing) there is
   // nothing to stop and the answer stands, as it does when the clock runs out.
   run.stop = () => {
@@ -190,7 +195,7 @@ export async function runChannel({ name, spawn, args, text, cwd, env, timeoutMs,
   if (timedOut && !session.finished) throw timeoutError(name, limit);
   const parsed = session.result();
   if (!session.finished) parsed.errors.push(`${name} exited before it had answered every message it was sent.`);
-  return { parsed, stderr: out.stderr, exitCode: session.finished && (stopped || timedOut) ? 0 : out.exitCode };
+  return { parsed, stderr: out.stderr, exitCode: session.finished && (stopped || timedOut) ? 0 : out.exitCode, beforeInput: !inputSent && run.receipts.size === 0 };
 }
 
 // A note for a card whose worker is headless. The worker row names the server

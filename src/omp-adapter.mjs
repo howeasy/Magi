@@ -35,7 +35,13 @@ export const adapter = {
       return { ...s, model: modelFrom(tail) ?? modelFrom(head) };
     }),
   purpose: ompSessionPurpose,
-  headless: { bin: 'omp', args: headlessOmpArgs, channel: ompRpcSession },
+  headless: {
+    bin: 'omp', args: headlessOmpArgs, channel: ompRpcSession,
+    // Windows SQLite can fail truncating its WAL during startup. Retry only
+    // before any RPC input or note; never replay a possibly executed request.
+    retryStartup: ({ beforeInput, exitCode, stderr, parsed }) =>
+      beforeInput === true && exitCode !== 0 && !parsed.message && /\bSQLITE_IOERR_TRUNCATE\b/.test(stderr),
+  },
   // omp's own reviewer on a headless run. `plan` picks its model (never the
   // worker's own), `overlay` tells omp which, `describe` says so to the caller.
   advisor: { defaultOn: advisorDefaultOn, plan: planAdvisor, overlay: writeAdvisorOverlay, describe: advisorLine },

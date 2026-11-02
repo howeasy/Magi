@@ -26,7 +26,7 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { makeEngine, toolError, makeProgress, selfName } from './peer.mjs';
 import { z } from 'zod';
 import { peerInputSchema, peerToolDescription } from './peer-schema.mjs';
-import { runCli, killTrackedChildren, classifyFailure, looksLikeAuthFailure, authError, BridgeError } from './exec.mjs';
+import { runCli, killTrackedChildren, classifyFailure, looksLikeAuthFailure, authError, BridgeError, timeoutLimit, timeoutError } from './exec.mjs';
 import { runChannel, deliverHeadlessNote, stopHeadlessWorker } from './worker-channel.mjs';
 import { resolveOrigin, deliverReplyToOrigin } from './transport.mjs';
 import { relayCall, relayTo, localAddress, queueRelayEvent, setRelayEventHandler, deliverWorkerMessage, pushFiles, pullFiles } from './relay.mjs';
@@ -181,7 +181,7 @@ function remoteGate(session, seen) {
 export async function runHeadless(adapter, { text, cwd, allowWrites, allowCommands = false, resumeThreadId, model, advisor = null, timeoutMs, progress, taskId, round, signal, host = null }) {
   // Admission is checked at dispatch; disabling later cannot strand this work.
   const observedAt = Date.now();
-  const { bin, args, parse, channel } = adapter.headless;
+  const { bin, args, parse, channel, retryStartup } = adapter.headless;
   const remote = host ? remoteConfig(host) : null;
   if (remote && !channel) throw new BridgeError('BAD_REQUEST', `A ${adapter.peer} worker cannot run on another machine: it is not held on a channel. Drop host.`);
   // The operator's wrapper, validated at startup; the engine refused
@@ -248,7 +248,16 @@ export async function runHeadless(adapter, { text, cwd, allowWrites, allowComman
       // Held open, so a note on this taskId reaches it while it works. A
       // channel whose run settings are not argv (Codex) reads them here.
       const launch = { allowWrites, allowCommands, resumeThreadId, cwd, model };
-      ({ parsed, ...res } = await runChannel({ name: bin, args: launchArgs, text, cwd, env, timeoutMs, signal, progress, taskId, wrapper, onSpawn, open: (io) => channel(io, launch) }));
+      const limit = timeoutLimit(timeoutMs);
+      const deadline = Date.now() + limit;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) throw timeoutError(bin, limit);
+        ({ parsed, ...res } = await runChannel({ name: bin, args: launchArgs, text, cwd, env, timeoutMs: remaining, signal, progress, taskId, wrapper, onSpawn, open: (io) => channel(io, launch) }));
+        if (attempt > 0 || !retryStartup?.({ ...res, parsed })) break;
+        progress?.(`${bin} hit a transient SQLite startup failure before receiving input; retrying once`);
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
     } else {
       res = await runCli(bin, launchArgs, { cwd, stdin: text, timeoutMs, signal, env, wrapper, onSpawn, onProgress: progress });
       parsed = parse(res.stdout);

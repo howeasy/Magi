@@ -10,6 +10,16 @@ at the end is for looking one up.
 
 ## Doctor reports the database or stale workers
 
+An OMP worker can fail during startup with `SQLITE_IOERR_TRUNCATE` against
+its own `~/.omp/agent/agent.db`. For a local headless worker, Magi retries
+this exact failure once after 250 ms, within the original timeout, only when
+no RPC input or note has been sent or queued. It never retries a request
+that may have executed, a cancellation, another SQLite error, or a remote
+worker. A second failure is reported normally. This recovers a transient
+startup failure; it does not repair database corruption. Keep the database
+and credentials in place and check disk space and SQLite `quick_check`
+before considering a database repair.
+
 Doctor runs `PRAGMA quick_check` on `magi.db` before reading provider settings.
 Corruption stops the database-dependent checks: stop Magi servers, restore a
 known-good database backup and run `magi doctor` again. A busy database is not
