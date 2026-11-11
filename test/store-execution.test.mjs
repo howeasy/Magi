@@ -8,7 +8,7 @@ import { makeWorkspace } from './helpers/harness.mjs';
 import { runHeadless } from '../src/serve.mjs';
 import { makeEngine } from '../src/peer.mjs';
 import { database } from '../src/store.mjs';
-import { listWorkers, readTask, listMail } from '../src/state.mjs';
+import { listWorkers, readTask, listMail, registerWorker, recordWorkerChild, readWorker, unregisterWorker } from '../src/state.mjs';
 
 
 async function writerLock(home) {
@@ -26,6 +26,21 @@ function workspace() {
 }
 
 const adapter = (args, parse = (text) => ({ message: text.trim(), errors: [] })) => ({ peer: 'omp', headless: { bin: 'node', args: () => args, parse } });
+
+test('a replacement worker clears the previous process birth time', () => {
+  const cwd = workspace();
+  const taskId = 'replacement-child';
+  registerWorker({ taskId, harness: 'omp', bin: 'omp', cwd });
+  try {
+    recordWorkerChild(taskId, { childPid: 101, childStartedAt: 1000 });
+    recordWorkerChild(taskId, { childPid: 202 });
+    assert.equal(readWorker(taskId).childPid, 202);
+    assert.equal(readWorker(taskId).childStartedAt, null);
+    recordWorkerChild(taskId, { childPid: 202, childStartedAt: 2000 });
+    recordWorkerChild(taskId, { childPid: 202 });
+    assert.equal(readWorker(taskId).childStartedAt, 2000, 'same-child observations retain a known birth time');
+  } finally { unregisterWorker(taskId); }
+});
 
 test('headless worker registration retries a competing writer before running the peer', async () => {
   const cwd = workspace();

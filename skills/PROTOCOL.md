@@ -538,6 +538,13 @@ Sections, in order:
 
 Say "I could not verify this" when that is the truth.
 
+A `[magi]` line under a headless reply says how the run went. "Told to wrap
+up" means the worker neared its time limit and answered with what it had: read
+its `STATUS: BLOCKED` for what is left, and continue the card with its
+`taskId`, which resumes the worker where it stopped. "Started again N times"
+means the model provider was at capacity and Magi retried inside the round;
+nothing is owed for it.
+
 ## Independence decays
 
 A live or persistent peer keeps its history, so after several exchanges it has

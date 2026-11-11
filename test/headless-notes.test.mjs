@@ -92,6 +92,47 @@ function notesOf(logFile) {
   return readCalls(logFile).filter((call) => call.note);
 }
 
+test('omp retries one SQLite truncate failure before RPC input, without duplicating the request', async () => {
+  await isolated(async ({ ws, logFile }) => {
+    const result = await runHeadless(ompAdapter, { text: 'inspect once', cwd: ws, timeoutMs: 10000 });
+    assert.match(result.inlineReply, /Fake peer reply/);
+    const calls = readCalls(logFile).filter((call) => call.name === 'omp' && call.args?.includes('rpc'));
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].startupFailure, true);
+    assert.equal(calls[0].stdin, '');
+    assert.equal(calls[1].stdin, 'inspect once');
+  }, { env: { FAKE_OMP_STARTUP_SQLITE_COUNT: '1' } });
+});
+
+test('omp stops after the second SQLite startup failure', async () => {
+  await isolated(async ({ ws, logFile }) => {
+    await assert.rejects(runHeadless(ompAdapter, { text: 'inspect once', cwd: ws, timeoutMs: 10000 }), /SQLITE_IOERR_TRUNCATE/);
+    const calls = readCalls(logFile).filter((call) => call.name === 'omp' && call.args?.includes('rpc'));
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every((call) => call.startupFailure));
+  }, { env: { FAKE_OMP_STARTUP_SQLITE_COUNT: '5' } });
+});
+
+test('omp never replays a SQLite failure after RPC input was sent', async () => {
+  await isolated(async ({ ws, logFile }) => {
+    await assert.rejects(runHeadless(ompAdapter, { text: 'inspect once', cwd: ws, timeoutMs: 10000 }), /SQLITE_IOERR_TRUNCATE/);
+    const calls = readCalls(logFile).filter((call) => call.name === 'omp' && call.args?.includes('rpc'));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].stdin, 'inspect once');
+  }, { env: { FAKE_OMP_SQLITE_AFTER_PROMPT: '1' } });
+});
+
+test('cancellation during SQLite startup recovery prevents a second launch', async () => {
+  await isolated(async ({ ws, logFile }) => {
+    const controller = new AbortController();
+    await assert.rejects(runHeadless(ompAdapter, {
+      text: 'inspect once', cwd: ws, timeoutMs: 10000, signal: controller.signal,
+      progress: (message) => { if (message.includes('retrying once')) controller.abort(); },
+    }), (error) => error.code === 'CANCELLED');
+    assert.equal(readCalls(logFile).filter((call) => call.startupFailure).length, 1);
+  }, { env: { FAKE_OMP_STARTUP_SQLITE_COUNT: '1' } });
+});
+
 function assertFolded(h, note) {
   assert.match(note.note, /^PEER NOTE magi\/1 task_id=\S+ from=/);
   assert.match(note.note, /Also check the empty case\./);

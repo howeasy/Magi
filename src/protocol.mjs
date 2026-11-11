@@ -562,6 +562,30 @@ ${redact(o.body).text}
 ${foot}`;
 }
 
+// Magi's own note to a headless worker shortly before its time limit. A run
+// stopped at the limit returns nothing, so the worker is asked for what it
+// has while it can still say it. BLOCKED is the status the orchestrator
+// already reads as "continue this card".
+export function composeWrapUp(o) {
+  const head = `PEER NOTE ${PROTOCOL}${o.taskId ? ` task_id=${o.taskId}` : ''} from=${o.from ?? 'magi'} via=magi`;
+  const left = `${o.minutes} minute${o.minutes === 1 ? '' : 's'}`;
+  return `${head}
+
+Time is nearly up: this run is stopped in about ${left}, and anything not in your final message by then is lost. Start nothing new. Finish the step you are on only if it takes a minute or two, then send your final message now, in the requested format: STATUS: BLOCKED, then what is done, what is left, and exactly where you stopped (files, commands, next step). The orchestrator reads only that final message: repeat in it every finding or result from earlier in this run that it needs. The orchestrator can continue this card, which resumes this conversation.`;
+}
+
+// What a worker reads at the top of a request sent again after the provider
+// had no capacity for the first attempt. The conversation may or may not hold
+// the first copy, and a writing worker's tree may hold part of the work.
+// `notes`: what the orchestrator sent the failed attempt while it ran; they
+// were taken there and their sender was told not to resend them.
+export function composeCapacityRetry(text, attempt, notes = []) {
+  const carried = notes.length
+    ? `\n\n[magi] The orchestrator sent ${notes.length === 1 ? 'this note' : 'these notes'} during the previous attempt; ${notes.length === 1 ? 'it still applies' : 'they still apply'}:\n\n${notes.join('\n\n')}`
+    : '';
+  return `[magi] The model provider was at capacity and the previous attempt at this request did not finish (retry ${attempt}). This is the same request again, not a new one. If part of it was already done, in this conversation or in the working tree, check what is there and continue from it; do not start over or repeat finished work.\n\n${text}${carried}`;
+}
+
 // A queued message is read when the peer next takes input, which is precisely
 // when it has finished what it was doing. That ordering is the signal; there is
 // no status API on either side to poll for it.

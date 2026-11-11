@@ -208,6 +208,18 @@ if (name) {
   // A channel logs its call when the request arrives, so `stdin` is the prompt.
   if (!channel) log(record);
 
+  // Replay the Windows OMP SQLite startup failure before RPC ready/input.
+  if (channel && name === 'omp' && process.env.FAKE_OMP_STARTUP_SQLITE_COUNT) {
+    const counter = `${process.env.FAKE_CLI_LOG}.startup`;
+    const count = fs.existsSync(counter) ? Number(fs.readFileSync(counter, 'utf8')) : 0;
+    fs.writeFileSync(counter, String(count + 1));
+    if (count < Number(process.env.FAKE_OMP_STARTUP_SQLITE_COUNT)) {
+      log({ ...record, startupFailure: true });
+      process.stderr.write('SQLiteError: Database "agent.db": disk I/O error; code: "SQLITE_IOERR_TRUNCATE"\n');
+      process.exit(1);
+    }
+  }
+
   const emit = (s) => process.stdout.write(s);
   const codexMsg = (text) =>
     JSON.stringify({ type: 'thread.started', thread_id: 'th-fake' }) +
@@ -298,6 +310,10 @@ if (name) {
         else if (cmd.type === 'prompt' && !requested) {
           requested = true;
           log({ ...record, stdin: cmd.message, at: Date.now() });
+          if (process.env.FAKE_OMP_SQLITE_AFTER_PROMPT) {
+            process.stderr.write('SQLiteError: disk I/O error; code: "SQLITE_IOERR_TRUNCATE"\n');
+            process.exit(1);
+          }
           ok();
           omp.begin([cmd.id], cmd.message);
           settle();

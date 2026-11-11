@@ -675,6 +675,51 @@ Claude reply, session id and usage are read with the same code the one-shot
 parsers use (`parseOmpJsonl`, `parseClaudeJson`), and `runHeadless` judges
 them exactly as before.
 
+**Two ways a round used to end with nothing.** Both are handled inside the
+run, and the orchestrator reads a `[magi]` line under the reply when either
+happened (`runNotes`, `src/peer.mjs`).
+
+- *The provider had no capacity.* When a run on this machine fails with no
+  assistant message and an error that reads as capacity (`looksLikeCapacity`,
+  `src/exec.mjs`: "at capacity", overloaded, 429/529, a turn rate limit; never
+  a spent usage limit or quota, which lasts hours), `runHeadless` waits 30 s,
+  then 90 s, and starts it again, up to twice (`MAGI_CAPACITY_RETRIES`,
+  `MAGI_CAPACITY_RETRY_MS`). A retry resumes the session the failed attempt
+  reported, when it reported one, and sends the request again under a line
+  that says it is the same request (`composeCapacityRetry`), since that
+  session may never have seen it and a writing worker's tree may hold part of
+  the work. It is not started when less than the wait plus a minute of the
+  round's time is left. The wait sends progress every ten seconds, so a
+  client that drops a quiet call keeps an inline one. No run is held during
+  it: a card note is refused with `WORKER_RETRYING` (send it again shortly),
+  a stop ends the retry, and a plain close does not, since it only stops the
+  orchestrator waiting. Notes the failed attempt had taken go with the retry,
+  under the request. A failure after retries says how many were made. A worker on
+  another machine is not retried. In the ledger of 2026-10-20..11-10, 25 of
+  85 unanswered rounds were "Codex is at capacity", most failing within a
+  minute, and one was continued on its card.
+- *The time limit.* Five minutes before the limit (15% of a limit under 33
+  minutes; never on a run under ten; `MAGI_WRAP_UP_MS` sets it, `0` turns it
+  off), `runChannel` sends the worker one note on its own channel
+  (`composeWrapUp`): start nothing new, and answer now with `STATUS: BLOCKED`,
+  what is done, what is left and where it stopped. Its reply is then the
+  round's answer, and continuing the card resumes its thread. A worker that
+  does not answer is stopped at the limit as before, and the `TIMEOUT` says
+  the wrap-up was sent. A worker that was writing its final answer when the
+  note went out takes it as a fresh turn afterwards; the Claude and omp
+  channels then return the request's own answer, not that short turn, and
+  the reply is not called partial. In the same ledger 18 delegated runs were stopped at
+  40 to 60 minutes with nothing returned.
+
+Offline tests cover both (`test/capacity-retry-wrap-up.test.mjs`, a fake
+worker). Checked live on 2026-11-10 against Claude Code 2.1.316 only: twice,
+a headless worker on a four-minute limit was told at two minutes, answered
+`STATUS: BLOCKED` within 45 seconds, and the same thread then answered a
+request resumed under the capacity-retry line. omp 18.10.4 and Codex 0.163.0
+could not be run that day (no credits; usage limit), so how their agents act
+on the note mid-turn, and a real capacity failure on any harness, are
+unverified.
+
 **Codex** takes its run settings (cwd, model, `approvalPolicy:"never"`,
 sandbox) as request parameters on `thread/start` (or `thread/resume` for a
 follow-up) and `turn/start`, not argv: the argv is only `app-server --listen

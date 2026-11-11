@@ -164,6 +164,20 @@ export function looksLikeAuthFailure(text) {
   return AUTH_RE.test(text ?? '');
 }
 
+// The provider had no room for the turn right now: transient, and worth trying
+// again in a minute (25 of 85 unanswered rounds in three weeks, 2026-11-10, were
+// "Codex is at capacity"). A spent usage limit or quota looks similar and is
+// not: it lasts hours, and a retry only spends the round's time.
+// The bare status numbers count only beside a word that makes them one: a
+// stack frame (`x.js:429:12`) on a crashed worker's stderr is not capacity.
+const CAPACITY_RE = /at capacity|over capacity|overloaded|turn_rate_limit|rate[ _-]?limit(?:ed)?[ _-]?exceeded|too many requests|server is busy|\b(?:HTTP|status(?:\s+code)?|code|error)["':=\s]{1,3}(?:429|529)\b/i;
+const SPENT_LIMIT_RE = /usage[ _-]?limit|quota|purchase more|billing|insufficient[ _-]?(?:credit|fund)/i;
+
+export function looksLikeCapacity(text) {
+  const t = text ?? '';
+  return CAPACITY_RE.test(t) && !SPENT_LIMIT_RE.test(t);
+}
+
 // Each harness signs in its own way, and a remedy for the wrong one sends the
 // user to fix an account that was never the problem. omp: `omp login [PROVIDER]`
 // and the provider's own key variable (omp 18.4.4, `omp login --help`).
@@ -603,10 +617,13 @@ export function claudeStreamSession({ send, finish, receipt }) {
   const sent = new Set([request]);
   const consumed = new Set();
   const notes = new Set();
+  const ownNotes = new Set(); // Magi's own (the wrap-up), not the orchestrator's
   let last = null;
+  let answer = null; // the result of the turn that took the request
+  let afterAnswer = false; // the last turn took only own notes, after that answer
   let sessionId = null;
   let finished = false;
-  const user = (text, uuid, extra = {}) => ({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null, session_id: '', uuid, ...extra });
+  const user =(text, uuid, extra = {}) => ({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null, session_id: '', uuid, ...extra });
   const settle = () => {
     if (finished || ![...sent].every((u) => consumed.has(u))) return;
     finished = true;
@@ -617,10 +634,11 @@ export function claudeStreamSession({ send, finish, receipt }) {
     // A failed write surfaces as the run's exit; nothing else reads it.
     start(prompt) { send(user(prompt, request)).catch(() => {}); },
     // 'next' lands the note at the next step boundary of the running turn.
-    note(text) {
+    note(text, { own = false } = {}) {
       const uuid = randomUUID();
       sent.add(uuid);
       notes.add(uuid);
+      if (own) ownNotes.add(uuid);
       const written = send(user(text, uuid, { priority: 'next' })).catch((e) => {
         sent.delete(uuid);
         settle();
@@ -637,6 +655,12 @@ export function claudeStreamSession({ send, finish, receipt }) {
         // taken to consume everything outstanding, so the run cannot hang on
         // it; a note's receipt is then a guess. Drop this once 2.1.290 is the floor.
         const turn = Array.isArray(ev.user_message_uuids) ? ev.user_message_uuids : [...sent].filter((u) => !consumed.has(u));
+        // The turn that took the request holds its answer. A later turn that
+        // took only Magi's own wrap-up note, because the answer was already
+        // complete when the note landed, must not replace it.
+        if (turn.includes(request)) answer = ev;
+        else if (answer && turn.length && turn.every((u) => ownNotes.has(u))) afterAnswer = true;
+        else afterAnswer = false;
         for (const uuid of turn) {
           consumed.add(uuid);
           if (notes.has(uuid)) receipt(uuid, turn.includes(request) ? 'received_mid_turn' : 'received');
@@ -646,7 +670,8 @@ export function claudeStreamSession({ send, finish, receipt }) {
     },
     result() {
       if (!last) return { message: '', sessionId, errors: ['Claude produced no result.'] };
-      const r = claudeResult(last);
+      const kept = afterAnswer ? claudeResult(answer) : null;
+      const r = kept?.message && !kept.errors.length ? Object.assign(kept, { completeBeforeWrapUp: true }) : claudeResult(last);
       r.sessionId ??= sessionId;
       return r;
     },

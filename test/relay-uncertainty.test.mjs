@@ -176,7 +176,13 @@ test('F2: a queued deliver that times out before write is definite and cannot be
 
 test('F2: a rejected channel send after its write attempt stays uncertain', { timeout: 60000 }, () => isolated('write-rejected', async ({ logFile }) => {
   await assert.rejects(relayCall('testhost', 'deliver', { text: 'x'.repeat(8 * 1024 * 1024) }), (error) => {
-    assert.equal(error.code, 'WORKER_CLOSED');
+    // Which end reports first is a race: usually the relay's destroyed stdin
+    // closes the pipe and the write is refused (WORKER_CLOSED); sometimes, seen
+    // only on GitHub's Linux runner (two of three runs, ten seconds each), the
+    // pipe stays open until the relay exits and its exit is the failure
+    // (REMOTE_FAILED). Either way the write was attempted, so the call must
+    // stay uncertain.
+    assert.ok(['WORKER_CLOSED', 'REMOTE_FAILED'].includes(error.code), error.code);
     assert.equal(error.dispatchUncertain, true);
     assert.match(error.message, /do not (?:resend|retry).*blindly/i);
     return true;

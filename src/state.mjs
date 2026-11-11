@@ -1191,7 +1191,7 @@ export function recordWorkerChild(taskId, { childPid, childStartedAt = null }) {
   return locked('workers', () => {
     const rec = getRecord(magiHome(), 'workers', taskId);
     if (!rec || rec.pid !== process.pid) return null;
-    const next = { ...rec, childPid, ...(childStartedAt != null || rec.childStartedAt == null ? { childStartedAt } : {}) };
+    const next = { ...rec, childPid, ...(childPid !== rec.childPid || childStartedAt != null || rec.childStartedAt == null ? { childStartedAt } : {}) };
     setRecord(magiHome(), 'workers', taskId, next);
     return next;
   });

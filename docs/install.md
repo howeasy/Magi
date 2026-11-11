@@ -573,6 +573,9 @@ reading its cmap; a font without them takes `icons` off.
 | `MAGI_TIMEOUT_MS` | default for a request sent without `timeoutMs` (a headless run or a live wait), read by the server per request; `timeoutMs` on a request overrides it, capped at 60 minutes; a value that is not a positive number is refused with `BAD_REQUEST` naming it | 2400000 |
 | `MAGI_CONFIRM_MS` | request/note receipt-confirmation budget; reply/question routes do not wait | 3000 |
 | `MAGI_MAX_BACKGROUND` | concurrent background headless runs per server; restart to change | 4 |
+| `MAGI_CAPACITY_RETRIES` | how many times a headless run is started again when the model provider is at capacity (not a spent usage limit); `0` turns it off; at most 5 | 2 |
+| `MAGI_CAPACITY_RETRY_MS` | the wait before the first such retry; each later one waits three times longer | 30000 |
+| `MAGI_WRAP_UP_MS` | how long before its time limit a headless worker is told to wrap up and answer with what it has; `0` turns it off | 5 minutes, 15% of a shorter limit, none under 10 minutes |
 | `MAGI_OMP_ADVISOR` | `1`, `true`, `on` or `yes` runs omp's own advisor on every headless omp worker; a request's `advisor` overrides it; restart the harness to change it (`docs/usage.md`) | unset |
 | `MAGI_OMP_ADVISOR_MODELS` | the models omp's advisor may run on, comma-separated in preference order (omp's own names, as `omp models ls` lists them); the first that is not the worker's own model is used, a different vendor first, and your omp `modelRoles.advisor` follows the list; restart the harness to change it (`docs/usage.md`) | unset |
 | `MAGI_WORKER_WRAPPER` | a JSON array argv every headless worker starts under, `<argv...> -- <worker argv...>`: the operator's sandbox, which `allowCommands` requires; checked at server start (`BAD_CONFIG` if unusable); Magi enforces nothing itself (`docs/security.md`) | unset |

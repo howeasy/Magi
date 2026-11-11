@@ -184,6 +184,8 @@ export function ompRpcSession({ send, finish, receipt }) {
   // User messages the current run has already taken: a note that is not its
   // run's first joined a turn in progress; one that is started a fresh turn.
   let usersInRun = 0;
+  // The request's own answer, kept when Magi's wrap-up note arrived after it.
+  let answered = null;
   let sessionId = null;
   let workerModel = null;
   let chunk = null;
@@ -285,6 +287,13 @@ export function ompRpcSession({ send, finish, receipt }) {
           for (const [id, n] of notes) {
             if (n.read || !text.includes(n.marker)) continue;
             n.read = true;
+            // Magi's own note (the wrap-up) starting a fresh turn means the
+            // request's turn had already ended: what it said is the answer,
+            // and the short turn this note opens must not replace it.
+            if (n.own && usersInRun === 0) {
+              const before = messages.result();
+              if (before.message && !before.errors.length) answered = before.message;
+            }
             receipt(id, usersInRun > 0 ? 'received_mid_turn' : 'received');
           }
           usersInRun++;
@@ -299,12 +308,12 @@ export function ompRpcSession({ send, finish, receipt }) {
       prompt = text;
       begin();
     },
-    note(text) {
+    note(text, { own = false } = {}) {
       const id = `magi-note-${randomUUID()}`;
       const marker = `magi-delivery:${id}`;
       pending.add(id);
       settled = false;
-      notes.set(id, { marker, read: false });
+      notes.set(id, { marker, read: false, own });
       const command = { id, type: 'prompt', message: `${text}\n<!-- ${marker} -->`, streamingBehavior: 'steer' };
       const written = (begun ? send(command) : new Promise((resolve, reject) => backlog.push({ command, resolve, reject })))
         .catch((e) => {
@@ -328,6 +337,7 @@ export function ompRpcSession({ send, finish, receipt }) {
       const r = messages.result();
       r.sessionId = sessionId ?? r.sessionId;
       if (workerModel) r.model = workerModel;
+      if (answered !== null) Object.assign(r, { message: answered, completeBeforeWrapUp: true });
       return r;
     },
   };

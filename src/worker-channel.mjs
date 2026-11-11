@@ -102,14 +102,17 @@ function unregister(taskId, run) {
 // the process ended; the verdict on that is runHeadless's, as for runCli.
 // `spawn` is the program to start when it is not `name` itself: ssh, for a
 // worker on another machine, while messages keep saying "omp on devbox".
-export async function runChannel({ name, spawn, args, text, cwd, env, timeoutMs, signal, progress, taskId, open, wrapper, onSpawn }) {
+// `wrapUp(minutesLeft)` composes the note a worker is sent shortly before its
+// limit (wrapUpLeadMs), so a run that would be killed with nothing returned
+// answers with what it has instead.
+export async function runChannel({ name, spawn, args, text, cwd, env, timeoutMs, signal, progress, taskId, open, wrapper, onSpawn, wrapUp }) {
   if (signal?.aborted) throw cancelledError(name);
   const limit = timeoutLimit(timeoutMs);
   let session;
   const child = spawnChannel(spawn ?? name, args, { cwd, env, wrapper, onLine: (frame) => session.line(frame), onJunk: (line) => session.junk?.(line) });
   // A caller that records the worker learns its pid; a throw there is not this run's failure.
   try { if (child.pid) onSpawn?.(child.pid); } catch { /* the record is best effort */ }
-  const run = { name, taskId, state: 'running', receipts: new Map(), listeners: new Map(), changed: new Set() };
+  const run = { name, taskId, state: 'running', receipts: new Map(), listeners: new Map(), changed: new Set(), notes: [] };
   let finishTimer = null;
   let stopped = false;
   let timedOut = false;
@@ -133,7 +136,12 @@ export async function runChannel({ name, spawn, args, text, cwd, env, timeoutMs,
     child.end();
     finishTimer = setTimeout(() => { stopped = true; child.kill(); }, FINISH_GRACE_MS);
   };
-  session = open({ send: child.send, finish, receipt: (id, status) => advance(run, id, status) });
+  let inputSent = false;
+  session = open({ send: (...args) => {
+    // Mark before attempting the write: an uncertain write must never replay.
+    inputSent = true;
+    return child.send(...args);
+  }, finish, receipt: (id, status) => advance(run, id, status) });
   // The orchestrator's stop. Once the answer is complete (finishing) there is
   // nothing to stop and the answer stands, as it does when the clock runs out.
   run.stop = () => {
@@ -143,10 +151,12 @@ export async function runChannel({ name, spawn, args, text, cwd, env, timeoutMs,
     child.kill();
     return 'stopped';
   };
-  run.note = async (noteText, onReceipt) => {
+  // `own`: a note of Magi's own (the wrap-up), not one the orchestrator sent,
+  // so not one a capacity retry carries into the next attempt.
+  run.note = async (noteText, onReceipt, { own = false } = {}) => {
     if (run.state === 'finishing') throw finishingError(taskId, name);
     if (run.state !== 'running') throw notRunningError(taskId);
-    const { id, sent } = session.note(noteText);
+    const { id, sent } = session.note(noteText, { own });
     run.receipts.set(id, 'unconfirmed');
     if (onReceipt) run.listeners.set(id, onReceipt);
     try { await sent; }
@@ -157,11 +167,34 @@ export async function runChannel({ name, spawn, args, text, cwd, env, timeoutMs,
       if (e.code === 'DELIVERY_FAILED') throw definite(e);
       throw definite(new BridgeError('DELIVERY_FAILED', `The headless ${name} worker's input closed before the note was written (${e.message}). Send a follow-up request on this taskId, which resumes the thread.`));
     }
+    // Only once written: a note that failed is its sender's to send again.
+    if (!own) run.notes.push(noteText);
     return id;
   };
   if (taskId) register(taskId, run);
 
   const timer = setTimeout(() => { timedOut = true; child.kill(); }, limit);
+  // The wrap-up: one note on the worker's own channel, only while it is still
+  // working. Best effort: a worker that cannot take it is stopped at the limit
+  // as before.
+  const lead = wrapUp ? wrapUpLeadMs(limit) : 0;
+  let wrapUpSent = false;
+  // Rounded down: a worker told "2 minutes" with 90 seconds left is stopped mid-answer.
+  const leadMinutes = Math.max(1, Math.floor(lead / 60000));
+  // A worker that was writing its final answer when the note went out takes
+  // it as a fresh turn afterwards. The Claude and omp channels then keep the
+  // request's own answer (`completeBeforeWrapUp`); a Codex steer with no
+  // active turn is refused, so nothing replaces its answer either.
+  const wrapUpTimer = lead > 0 ? setTimeout(() => {
+    if (run.state !== 'running') return;
+    // Counted as sent only once it was written: a reply is called partial, and
+    // a timeout says the worker was told, only when it really was.
+    run.note(wrapUp(leadMinutes), null, { own: true }).then(() => {
+      wrapUpSent = true;
+      progress?.(`${name} is ${leadMinutes} min from its limit; told to wrap up`);
+    }, () => { /* answered already, or its input closed */ });
+  }, limit - lead) : null;
+  wrapUpTimer?.unref?.();
   const abort = () => { cancelled = true; child.kill(); };
   signal?.addEventListener('abort', abort, { once: true });
   // MCP clients abort a tool call that goes quiet; see runCli.
@@ -175,6 +208,7 @@ export async function runChannel({ name, spawn, args, text, cwd, env, timeoutMs,
     out = await child.exited;
   } finally {
     clearTimeout(timer);
+    clearTimeout(wrapUpTimer);
     clearTimeout(finishTimer);
     clearInterval(heartbeat);
     signal?.removeEventListener('abort', abort);
@@ -187,10 +221,47 @@ export async function runChannel({ name, spawn, args, text, cwd, env, timeoutMs,
   if (cancelled) throw cancelledError(name);
   if (run.stopRequested && !session.finished) throw stoppedError(name);
   // An answer already complete when the clock ran out is still the answer.
-  if (timedOut && !session.finished) throw timeoutError(name, limit);
+  if (timedOut && !session.finished) {
+    const error = timeoutError(name, limit);
+    if (wrapUpSent) error.message += ` It was told to wrap up ${leadMinutes} min before the limit and did not answer in time; continuing the card with its taskId resumes its thread.`;
+    throw error;
+  }
   const parsed = session.result();
   if (!session.finished) parsed.errors.push(`${name} exited before it had answered every message it was sent.`);
-  return { parsed, stderr: out.stderr, exitCode: session.finished && (stopped || timedOut) ? 0 : out.exitCode };
+  // `notes`: the orchestrator's notes this run took, for a retry to carry on.
+  // A complete answer the note arrived after is not a partial one.
+  return { parsed, stderr: out.stderr, exitCode: session.finished && (stopped || timedOut) ? 0 : out.exitCode, beforeInput: !inputSent && run.receipts.size === 0, wrapUpSent: wrapUpSent && !parsed.completeBeforeWrapUp, notes: run.notes };
+}
+
+// A card whose run failed on provider capacity and is waiting to start again
+// (runHeadless). No run is registered meanwhile, so a note has no channel to
+// go down and a stop has no process to kill: the note is refused with the
+// reason, and the stop is remembered for the retry to honour.
+const retryWaits = new Map(); // taskId -> { name, stop }
+export function beginRetryWait(taskId, name) {
+  retryWaits.set(taskId, { name, stop: false });
+}
+/** Ends the wait; true when a stop was asked for during it. */
+export function endRetryWait(taskId) {
+  const wait = retryWaits.get(taskId);
+  retryWaits.delete(taskId);
+  return wait?.stop === true;
+}
+function retryingError(taskId, name) {
+  return definite(new BridgeError('WORKER_RETRYING', `Task ${taskId}'s headless ${name} worker is between attempts: the model provider was at capacity and the run starts again shortly. This note was not sent. Send it again in a minute or two, once the worker is running.`));
+}
+
+// How long before its limit a worker is told to wrap up: five minutes, or 15%
+// of a shorter limit; never on a run of under ten minutes, where there is
+// nothing to save. MAGI_WRAP_UP_MS sets the lead (0 turns it off).
+export function wrapUpLeadMs(limit) {
+  const set = (process.env.MAGI_WRAP_UP_MS ?? '').trim();
+  if (set) {
+    const lead = Number(set);
+    return Number.isFinite(lead) && lead > 0 && lead < limit ? lead : 0;
+  }
+  if (limit < 10 * 60_000) return 0;
+  return Math.min(5 * 60_000, Math.round(limit * 0.15));
 }
 
 // A note for a card whose worker is headless. The worker row names the server
@@ -203,6 +274,7 @@ export async function deliverHeadlessNote({ taskId, text, progress }) {
   const via = `headless:${worker.harness}`;
   if (worker.pid === process.pid) {
     const run = runs.get(taskId);
+    if (!run && retryWaits.has(taskId)) throw retryingError(taskId, worker.harness);
     if (!run) throw definite(new BridgeError('NO_LIVE_PEER', `Task ${taskId}'s headless ${worker.harness} worker takes no notes: ${worker.bin} runs one prompt and exits. Wait for its reply, then send a follow-up request on this taskId.`));
     const id = await run.note(text);
     const deliveryStatus = await waitReceipt(run, id, confirmWaitMs());
@@ -243,6 +315,11 @@ export async function stopHeadlessWorker({ taskId, waitMs = STOP_WAIT_MS }) {
   const worker = readWorker(taskId);
   if (!worker) throw notRunningError(taskId);
   if (worker.pid === process.pid) {
+    // Between capacity retries nothing runs; the stop is what the retry reads.
+    if (!runs.get(taskId) && retryWaits.has(taskId)) {
+      retryWaits.get(taskId).stop = true;
+      return { stopped: true, outcome: 'stopped', workerPid: process.pid };
+    }
     const outcome = runs.get(taskId)?.stop() ?? 'ended';
     if (outcome === 'ended') throw notRunningError(taskId);
     return { stopped: outcome === 'stopped', outcome, workerPid: process.pid };
