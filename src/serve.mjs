@@ -26,8 +26,9 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { makeEngine, toolError, makeProgress, selfName } from './peer.mjs';
 import { z } from 'zod';
 import { peerInputSchema, peerToolDescription } from './peer-schema.mjs';
-import { runCli, killTrackedChildren, classifyFailure, looksLikeAuthFailure, authError, BridgeError, timeoutLimit, timeoutError } from './exec.mjs';
-import { runChannel, deliverHeadlessNote, stopHeadlessWorker } from './worker-channel.mjs';
+import { runCli, killTrackedChildren, classifyFailure, looksLikeAuthFailure, looksLikeCapacity, authError, BridgeError, timeoutLimit, timeoutError, cancelledError, stoppedError, HEARTBEAT_MS } from './exec.mjs';
+import { composeWrapUp, composeCapacityRetry } from './protocol.mjs';
+import { runChannel, deliverHeadlessNote, stopHeadlessWorker, beginRetryWait, endRetryWait } from './worker-channel.mjs';
 import { resolveOrigin, deliverReplyToOrigin } from './transport.mjs';
 import { relayCall, relayTo, localAddress, queueRelayEvent, setRelayEventHandler, deliverWorkerMessage, pushFiles, pullFiles } from './relay.mjs';
 import { FILES_OFF_HINT, filesBlock, fileMeta, filesEnabled } from './artifacts.mjs';
@@ -162,7 +163,7 @@ function remoteGate(session, seen) {
   return {
     get finished() { return session.finished; },
     start: (t) => session.start(t),
-    note: (t) => session.note(t),
+    note: (t, o) => session.note(t, o),
     line(ev) {
       if (!seen.hello && ev?.type === 'magi_worker') { seen.hello = ev; return; }
       session.line(ev);
@@ -209,6 +210,10 @@ export async function runHeadless(adapter, { text, cwd, allowWrites, allowComman
     void processStartedAtAsync(pid).then((childStartedAt) => childStartedAt && record({ childPid: pid, childStartedAt })).catch(() => {});
   } : undefined;
   let reply;
+  // How many times this run was started again because the provider was at capacity.
+  let capacityRetries = 0;
+  // The note a worker gets shortly before its limit (worker-channel.mjs).
+  const wrapUp = (minutes) => composeWrapUp({ taskId, minutes });
   // The temp file that names this run's advisor model; gone when the run is.
   let overlay = null;
   // The remote worktree this run works in, and what came back from it.
@@ -244,7 +249,9 @@ export async function runHeadless(adapter, { text, cwd, allowWrites, allowComman
       const launch = { allowWrites, allowCommands: false, resumeThreadId, cwd: workCwd, model };
       const payload = { protocol: REMOTE_PROTOCOL, allowWrites, resumeThreadId: resumeThreadId ?? null, model: model ?? null, advisorModel: advisor?.model ?? null, workspace: { repo: workspace.repo, work: workspace.work, rel: workspace.rel ?? '', taskId } };
       const seen = { hello: null };
-      ({ parsed, ...res } = await runChannel({ name: label, spawn: 'ssh', args: sshArgs(remote, remoteCommand(remote, `worker ${adapter.peer}`, payload)), text, cwd, env, timeoutMs, signal, progress, taskId, onSpawn, open: (io) => remoteGate(channel(io, launch), seen) }));
+      // ponytail: no capacity retry for a remote worker (its workspace and
+      // session are on that machine); the wrap-up note does cross the channel.
+      ({ parsed, ...res } = await runChannel({ name: label, spawn: 'ssh', args: sshArgs(remote, remoteCommand(remote, `worker ${adapter.peer}`, payload)), text, cwd, env, timeoutMs, signal, progress, taskId, onSpawn, wrapUp, open: (io) => remoteGate(channel(io, launch), seen) }));
       if (!seen.hello) {
         if (res.exitCode === 255) throw unreachable(remote, res.stderr);
         throw new BridgeError('REMOTE_FAILED', `${remote.magi} on remote "${host}" did not start a worker (exit ${res.exitCode}: ${res.stderr.trim().slice(0, 400) || 'no output'}). Check that it is a Magi with \`magi worker\` and that "node" in remotes.json runs there.`);
@@ -253,16 +260,53 @@ export async function runHeadless(adapter, { text, cwd, allowWrites, allowComman
     } else if (channel) {
       // Held open, so a note on this taskId reaches it while it works. A
       // channel whose run settings are not argv (Codex) reads them here.
-      const launch = { allowWrites, allowCommands, resumeThreadId, cwd, model };
       const limit = timeoutLimit(timeoutMs);
       const deadline = Date.now() + limit;
-      for (let attempt = 0; attempt < 2; attempt++) {
+      let startupRetried = false;
+      // Each capacity retry resumes the session the failed attempt reported,
+      // when it reported one, and sends the request again under a line that
+      // says so (composeCapacityRetry): the session may never have seen it.
+      let resumeId = resumeThreadId;
+      let runText = text;
+      const notesTaken = [];
+      for (;;) {
         const remaining = deadline - Date.now();
         if (remaining <= 0) throw timeoutError(bin, limit);
-        ({ parsed, ...res } = await runChannel({ name: bin, args: launchArgs, text, cwd, env, timeoutMs: remaining, signal, progress, taskId, wrapper, onSpawn, open: (io) => channel(io, launch) }));
-        if (attempt > 0 || !retryStartup?.({ ...res, parsed })) break;
-        progress?.(`${bin} hit a transient SQLite startup failure before receiving input; retrying once`);
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        const launch = { allowWrites, allowCommands, resumeThreadId: resumeId, cwd, model };
+        const attemptArgs = capacityRetries ? args({ allowWrites, allowCommands, resumeThreadId: resumeId, cwd, model, advisor: Boolean(advisor), advisorConfig: overlay?.path }) : launchArgs;
+        ({ parsed, ...res } = await runChannel({ name: bin, args: attemptArgs, text: runText, cwd, env, timeoutMs: remaining, signal, progress, taskId, wrapper, onSpawn, wrapUp, open: (io) => channel(io, launch) }));
+        if (!startupRetried && retryStartup?.({ ...res, parsed })) {
+          startupRetried = true;
+          progress?.(`${bin} hit a transient SQLite startup failure before receiving input; retrying once`);
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          continue;
+        }
+        // The provider had no room for the turn: wait and try again inside
+        // this round, while enough of its time is left for a real attempt.
+        const failed = [...parsed.errors, res.exitCode !== 0 ? res.stderr : ''].join('; ');
+        if (parsed.message || !looksLikeCapacity(failed) || capacityRetries >= capacityRetryLimit()) break;
+        const wait = capacityRetryDelayMs(capacityRetries);
+        if (deadline - Date.now() < wait + CAPACITY_MIN_ATTEMPT_MS) break;
+        capacityRetries++;
+        progress?.(`${bin}'s model provider is at capacity; retry ${capacityRetries} of ${capacityRetryLimit()} in ${Math.round(wait / 1000)}s`);
+        // No run is held during the wait, so a note or a stop for the card has
+        // nothing to reach: the wait is registered, a note is refused saying
+        // why, and a stop ends the retry.
+        if (taskId) beginRetryWait(taskId, bin);
+        let stopAsked = false;
+        try { await pause(wait, signal, bin, progress); }
+        finally { if (taskId) stopAsked = endRetryWait(taskId); }
+        // A stop taken by another server closed the round with STOPPED; a plain
+        // close only stops the orchestrator waiting and leaves the worker to
+        // finish, so the retry goes ahead. A ledger that cannot be read just
+        // now is not a stop.
+        let entry = null;
+        try { entry = taskId ? readTask(taskId)?.rounds.find((r) => r.round === (round ?? 1)) : null; } catch { /* busy: carry on */ }
+        if (stopAsked || entry?.closeCode === 'STOPPED') throw stoppedError(bin);
+        resumeId = parsed.sessionId ?? resumeId;
+        // Notes the failed attempt took go with the request: their sender was told not to resend them.
+        notesTaken.push(...(res.notes ?? []));
+        runText = composeCapacityRetry(text, capacityRetries, notesTaken);
       }
     } else {
       res = await runCli(bin, launchArgs, { cwd, stdin: text, timeoutMs, signal, env, wrapper, onSpawn, onProgress: progress });
@@ -291,8 +335,14 @@ export async function runHeadless(adapter, { text, cwd, allowWrites, allowComman
     } else if (remote) {
       footer = `\n\n[magi] The worker ran on ${host}, read-only, in a copy of this tree at ${workspace.base.slice(0, 12)}${workspace.dirty ? ' (HEAD plus uncommitted changes)' : ''}.`;
     }
-    reply = { inlineReply: parsed.message, via: 'headless', threadId: parsed.sessionId, usage: parsed.usage ?? null, approvalMode, ...(allowCommands ? { allowCommands: true } : {}), ...(parsed.advice?.length ? { advice: parsed.advice } : {}), ...(advisor && parsed.model ? { workerModel: parsed.model } : {}), ...(remote ? { host, remoteFooter: footer, ...(collected?.changed ? { branch: collected.branch, commit: collected.commit } : {}) } : {}) };
+    reply = { inlineReply: parsed.message, via: 'headless', threadId: parsed.sessionId, usage: parsed.usage ?? null, approvalMode, ...(capacityRetries ? { capacityRetries } : {}), ...(res.wrapUpSent ? { wrapUp: true } : {}), ...(allowCommands ? { allowCommands: true } : {}), ...(parsed.advice?.length ? { advice: parsed.advice } : {}), ...(advisor && parsed.model ? { workerModel: parsed.model } : {}), ...(remote ? { host, remoteFooter: footer, ...(collected?.changed ? { branch: collected.branch, commit: collected.commit } : {}) } : {}) };
   } catch (e) {
+    if (capacityRetries && e instanceof BridgeError && !['CANCELLED', 'STOPPED_BY_ORCHESTRATOR'].includes(e.code)) {
+      const times = `${capacityRetries} time${capacityRetries === 1 ? '' : 's'}`;
+      e.message += looksLikeCapacity(e.message)
+        ? ` (The provider was at capacity; this run was started again ${times} before giving up. Wait a few minutes before sending it again.)`
+        : ` (This run was started again ${times} after the provider was at capacity; this failure is the last attempt's, and is not a capacity error.)`;
+    }
     // Provider health is this machine's; a remote's failure says nothing about it.
     if (!remote) recordProviderFailure(adapter.peer, e, observedAt);
     // The remedy in a harness's error ("run omp login") is for that machine.
@@ -317,6 +367,36 @@ export async function runHeadless(adapter, { text, cwd, allowWrites, allowComman
   // Best effort and after the reply is secured: health never changes the outcome.
   if (!remote) recordProviderHealth(adapter.peer, { down: null });
   return reply;
+}
+
+// Capacity retries: how many, how long between them, and how much of the
+// round must be left for one to be worth starting. The variables are for an
+// operator who wants none (MAGI_CAPACITY_RETRIES=0) and for the tests.
+function capacityRetryLimit() {
+  const set = (process.env.MAGI_CAPACITY_RETRIES ?? '').trim();
+  const n = set ? Number(set) : 2;
+  return Number.isInteger(n) && n >= 0 ? Math.min(n, 5) : 2;
+}
+function capacityRetryDelayMs(done) {
+  const set = Number(process.env.MAGI_CAPACITY_RETRY_MS);
+  const base = Number.isFinite(set) && set > 0 ? set : 30_000;
+  return base * 3 ** done; // 30 s, then 90 s
+}
+const CAPACITY_MIN_ATTEMPT_MS = 60_000;
+
+// A wait the caller's cancellation ends at once.
+// It keeps saying so while it waits: an MCP client drops a call that goes
+// quiet for about a minute (see runCli), and the second wait is 90 s.
+function pause(ms, signal, name, progress) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(cancelledError(name));
+    const started = Date.now();
+    const beat = progress ? setInterval(() => progress(`${name}: waiting for provider capacity (${Math.round((ms - (Date.now() - started)) / 1000)}s left)`), HEARTBEAT_MS) : null;
+    const done = (settle) => { clearTimeout(timer); clearInterval(beat); signal?.removeEventListener('abort', abort); settle(); };
+    const abort = () => done(() => reject(cancelledError(name)));
+    const timer = setTimeout(() => done(resolve), ms);
+    signal?.addEventListener('abort', abort, { once: true });
+  });
 }
 
 // A name that matched nothing is usually a near miss ("web-api" for

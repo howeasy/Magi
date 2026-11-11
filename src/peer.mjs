@@ -79,6 +79,15 @@ export function adviceLines(advice, peerName) {
   return `\n[magi] ${peerName}'s advisor sent the worker ${advice.length} note${advice.length === 1 ? '' : 's'} during this run. They are its view, not verdicts; check what matters against the source.\n${rows.join('\n')}`;
 }
 
+// How a headless run went, where it changes how its reply should be read:
+// it was started again after the provider had no capacity, or it was told to
+// wrap up because its time was nearly gone.
+export function runNotes(r) {
+  const n = r?.capacityRetries;
+  return (n ? `\n\n[magi] The model provider was at capacity: this run was started again ${n} time${n === 1 ? '' : 's'} before it answered.` : '') +
+    (r?.wrapUp ? '\n\n[magi] This run neared its time limit and the worker was told to wrap up, so the reply may be partial. Continue the card with its taskId to resume the worker where it stopped.' : '');
+}
+
 // Notes are conversation, not an oversize handoff. Keep them small even when
 // attached to a card; a request can spill its larger body to a file.
 export const MAX_NOTE_CHARS = 12000;
@@ -117,6 +126,7 @@ function errText(e, action) {
     BAD_ROUND: 'Use the round named in the latest request or question header.',
     NOTE_TOO_LARGE: 'Put the detail in a file and send its path in a shorter message.',
     WORKER_FINISHING: 'Send a follow-up request on this taskId; it resumes the worker\'s thread with your note in it.',
+    WORKER_RETRYING: 'Send the note again in a minute or two; nothing was delivered and nothing is charged against your note budget.',
   }[code] ?? 'Follow the recovery instructions above; inspect `magi doctor` and `magi exchange <task_id>` if the cause is unclear.';
   return redact(`magi error - ${code}: ${e.message}\nNext: ${next}`).text;
 }
@@ -472,7 +482,7 @@ export function makeEngine(cfg) {
     // Everything a caller should read about how the request was routed or limited.
     const notes = [advisorNotApplied, writeNote, commandsNote].filter(Boolean);
     // What the caller reads when an advisor did run: which model reviewed, and its notes.
-    const advisorFooter = (r) => (advisorPlan ? cfg.advisor.describe(advisorPlan, r?.workerModel) + adviceLines(r?.advice, peerName) : '') + (r?.remoteFooter ?? '');
+    const advisorFooter = (r) => (advisorPlan ? cfg.advisor.describe(advisorPlan, r?.workerModel) + adviceLines(r?.advice, peerName) : '') + (r?.remoteFooter ?? '') + runNotes(r);
     const advisorSummary = () => (advisorPlan ? { model: advisorPlan.model, differentVendor: advisorPlan.differentVendor, worker: advisorPlan.worker } : undefined);
 
     // What the project already knows about this task rides along; nothing

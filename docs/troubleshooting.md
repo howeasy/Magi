@@ -170,6 +170,12 @@ was captured the message says so; the cause is then in omp itself, so re-run
 `is_error` with subtype `success` used to read just "success"; it now carries
 the result text.
 
+A failure that reads as the provider being at capacity ("Codex is at
+capacity", overloaded, 429/529) is retried inside the round before it is
+reported, and the message then ends "started again N times before giving up":
+wait a few minutes before sending it again. A spent usage limit or quota is
+not retried; that one needs the account, not time.
+
 ## A spawned peer says it is not authenticated, but the CLI works
 
 Codex does not forward the parent environment to MCP servers. If your auth
@@ -366,8 +372,9 @@ See [uninstall.md](uninstall.md).
 | `THREAD_NOT_LOADED` | the recorded Codex thread is not loaded in the remote's shared daemon | use the daemon that owns it, or send a queued note with `delivery:"live"`; do not resume the thread merely to observe it |
 | `DAEMON_TIMEOUT` / `DAEMON_CLOSED` / `DAEMON_RPC` / `DAEMON_PROTOCOL` | a remote daemon call timed out, disconnected, failed or returned an invalid result | follow the dispatch warning: a steer may have landed, so inspect its history before retrying; no automatic queue fallback or resend |
 | `STEER_TIMEOUT` | a steer was sent but not confirmed in time | it may have landed: check `peers` and the transcript before resending; a steered reply stays in `magi mail` |
-| `TIMEOUT` | the peer did not finish in time (default 40 minutes) | narrow the task, or raise `timeoutMs` (cap 60 minutes) |
+| `TIMEOUT` | the peer did not finish in time (default 40 minutes) | narrow the task, or raise `timeoutMs` (cap 60 minutes). A headless worker is told to wrap up shortly before the limit; when the message says it was and did not answer, continue the card with its `taskId` to resume its thread |
 | `BACKGROUND_LIMIT` | the server's background headless allowance is full | wait for a run to finish, use `wait:true`, or raise `MAGI_MAX_BACKGROUND` (default 4) and restart the harness |
+| `WORKER_RETRYING` | a note for a card whose headless worker is between attempts: the provider was at capacity and the run starts again shortly | send the note again in a minute or two; nothing was delivered or charged |
 | `PEER_FAILED` | the headless peer ran and failed | [the PEER_FAILED entry](#a-headless-run-failed-with-peer_failed) |
 | `OUTPUT_TOO_LARGE` | the peer exceeded the 32 MB stdout cap | narrow the request |
 | `RECONCILE_FIRST` | more than three cards in your coordinator session have answered turns with no outcome | record `kind:"outcome"` on them (`magi exchange <task_id>` re-reads one); continuing an existing card is still allowed |
