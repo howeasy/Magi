@@ -372,6 +372,13 @@ export function runCli(name, args, { cwd, stdin, timeoutMs, env, onStderr, onPro
           : new BridgeError('PROCESS_ERROR', `${name} failed to run: ${e.message}`),
       );
     });
+    // 'close' waits for the pipes, and a descendant that inherited them can
+    // outlive the child (and a tree kill, once its parent is gone): a run that
+    // exited would then be reported as a timeout, or never settle. As in
+    // spawnChannel, the pipes get a short drain after exit and are then closed.
+    child.on('exit', () => {
+      setTimeout(() => { child.stdout.destroy(); child.stderr.destroy(); }, EXIT_DRAIN_MS).unref();
+    });
     child.on('close', (code) => {
       children.delete(child);
       out += stdoutDecoder.end();

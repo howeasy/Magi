@@ -61,7 +61,9 @@ Doctor first runs SQLite `PRAGMA quick_check` on `magi.db`, then checks the
 executables (including omp when present) and their provider status, live
 sessions, the Codex app-server, the Codex desktop app's steer channel (a
 reachable app-server does not imply it), the desktop apps' URL handlers, both
-user MCP registrations independently, the active `magi` table's
+user MCP registrations independently (each must run a `bin/magi.mjs` that
+still exists: a checkout that moved fails the row, and one that is not the
+checkout doctor runs from is a warning), the active `magi` table's
 `tool_timeout_sec` (not an old `magi-omp` table or a child table; a
 commented-out header does not count as registration), Claude's
 `crossSessionInbound`, the installed skills, and with omp its `mcp.json`
@@ -153,7 +155,11 @@ sections with canonical headers such as `[mcp_servers.magi]`, or edit the
 registration manually using [mcp-config.md](mcp-config.md). Plain quoted key
 components, including `["mcp_servers"."magi"]`, use the same ownership rules
 for replacement, removal and inspection. Child tables, comments, LF/CRLF, and
-flat multiline arrays are supported. Nested array elements that start a line
+flat multiline arrays are supported: the section is written with the file's
+own line ending, a comment block directly above another table stays with
+that table when Magi's section before it is replaced or removed, and a
+foreign `env` value survives a reinstall whether it is a basic (`"..."`) or a
+literal (`'...'`) string. Nested array elements that start a line
 with `[` must be moved onto the assignment line or edited manually.
 
 Claude user registrations live in `~/.claude.json`, or
@@ -380,7 +386,8 @@ rows).
   session, – none, `off` a provider turned off), then whose work is open:
   `· 1 working here · 4 in web-api` (this session's cards, then up to
   two other sessions', then `N more working`), `N more open` when the status
-  lists fewer cards than are open, `· 1 question for claude` and `· 1 reply
+  lists fewer cards than are open, `· 1 question for claude` (questions on
+  cards Claude opened; one on a card codex or omp opened is theirs) and `· 1 reply
   for claude to check` when they are not zero, and `(stale)` after a failed
   refresh. In the terminal it is pinned under the prompt (`$.ui.status`). On
   the desktop a button in the prompt footer takes its place, after Claude
@@ -563,7 +570,7 @@ reading its cmap; a font without them takes `icons` off.
 | `CODEX_BIN` / `CLAUDE_BIN` / `OMP_BIN` | explicit paths to the CLIs | discovered |
 | `MAGI_AS` | the name a server orchestrates under (`serve --as` sets it) | `claude` or `codex` |
 | `MAGI_HOME` | ledger and mailbox location | `~/.magi` |
-| `MAGI_TIMEOUT_MS` | fallback timeout for a headless run started without one; a request always carries `timeoutMs` (default 40 minutes, capped at 60), so this rarely applies | 2400000 |
+| `MAGI_TIMEOUT_MS` | default for a request sent without `timeoutMs` (a headless run or a live wait), read by the server per request; `timeoutMs` on a request overrides it, capped at 60 minutes; a value that is not a positive number is refused with `BAD_REQUEST` naming it | 2400000 |
 | `MAGI_CONFIRM_MS` | request/note receipt-confirmation budget; reply/question routes do not wait | 3000 |
 | `MAGI_MAX_BACKGROUND` | concurrent background headless runs per server; restart to change | 4 |
 | `MAGI_OMP_ADVISOR` | `1`, `true`, `on` or `yes` runs omp's own advisor on every headless omp worker; a request's `advisor` overrides it; restart the harness to change it (`docs/usage.md`) | unset |

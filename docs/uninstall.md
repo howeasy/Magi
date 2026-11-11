@@ -27,7 +27,10 @@ That removes:
 the `claude` CLI is not needed to remove those entries. Unrelated
 registrations, extensions and Startup entries remain. Configuration updates
 keep exact pre-write `.bak` files and use atomic replacement; unsafe JSON/TOML
-is refused with `BAD_CONFIG` and repair instructions, not overwritten. If
+is refused with `BAD_CONFIG` and repair instructions, not overwritten. A
+refused file does not stop the rest: uninstall removes everything else it
+installed, leaves that file's bytes as they were, and exits with the refusal
+naming it, so the one entry left can be removed by hand. If
 Claude settings are unsafe, uninstall still removes both owned dashboard
 Startup files, preserves the settings bytes and reports `BAD_CONFIG`; repair
 the settings and re-run uninstall to finish removing the optional statusline.

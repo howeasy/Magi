@@ -76,10 +76,17 @@ function usage() {
                           (alone it does only this; with --claude/--codex/--omp, both)
   magi usage           subscription windows for Claude and Codex, per account
   magi uninstall       remove them again
+  magi help | --help   this text (after a command too: the command does not run)
 `);
 }
 
 async function main() {
+  // Asking for help is not a mistake, and never runs the command it follows:
+  // `magi uninstall --help` used to uninstall.
+  if (['help', '--help', '-h'].includes(cmd) || ['--help', '-h'].includes(rest[0])) {
+    usage();
+    return;
+  }
   switch (cmd) {
     case 'serve': {
       const { values, positionals } = parseArgs({ args: rest, options: { as: { type: 'string' } }, allowPositionals: true });
@@ -183,8 +190,10 @@ async function main() {
       const { sessionLabel } = await import(mod('src', 'fleet.mjs'));
       // The limit trims the listing, not the tally: a headline computed from the
       // newest 50 of 900 tasks read as the whole record.
+      const limit = Number(values.limit ?? 50);
+      if (!Number.isInteger(limit) || limit < 1) throw Object.assign(new Error(`--limit must be a positive whole number, got "${values.limit}". Try: magi log --limit 20`), { code: 'BAD_REQUEST' });
       const all = listTasks().filter((t) => !values.task || t.taskId === values.task);
-      const rows = all.slice(0, Number(values.limit ?? 50));
+      const rows = all.slice(0, limit);
       const tally = { scored: 0, accepted: 0, rejected: 0, open: 0, spend: 0, runs: 0, tokens: 0, tokenRuns: 0 };
       const tokFmt = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
       for (const t of all) {
@@ -553,6 +562,8 @@ async function main() {
       return;
     }
     case 'uninstall': {
+      // It takes no arguments; one it does not know is refused, not ignored.
+      parseArgs({ args: rest, options: {} });
       const { uninstall } = await import(mod('src', 'install.mjs'));
       await uninstall();
       return;

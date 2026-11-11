@@ -128,7 +128,14 @@ const SECRET_PATTERNS = [
   /\bAIza[A-Za-z0-9_-]{35}(?![A-Za-z0-9_-])/g,
   /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g,
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}/g,
+  // GitHub fine-grained, GitLab and npm tokens.
+  /\bgithub_pat_[A-Za-z0-9_]{20,}/g,
+  /\bglpat-[A-Za-z0-9_-]{20,}/g,
+  /\bnpm_[A-Za-z0-9]{30,}/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
+  // The AWS secret beside an access key id: its name ends in KEY, not SECRET.
+  /\b(?:AWS_)?SECRET_ACCESS_KEY\s*[:=]\s*["']?[A-Za-z0-9/+=]{16,}["']?/gi,
+  /\bBasic\s+[A-Za-z0-9+/]{16,}={0,2}/g,
   /\bxox[abprs]-[A-Za-z0-9-]{10,}/g,
   /\bBearer\s+[A-Za-z0-9._~+/-]{20,}=*/g,
   // Quoted values include JSON keys and literal secrets in source code.
@@ -216,10 +223,19 @@ function git(args, cwd) {
   }
 }
 
+const STAGED_REFS = ['--staged', 'staged', '--cached'];
+
+// A diffRef that git would read as an option rather than a revision. The
+// engine refuses one before any snapshot; `--end-of-options` below is the
+// second guard for a caller that reaches repoSnapshot another way.
+export function optionShapedRef(ref) {
+  return typeof ref === 'string' && ref.startsWith('-') && !STAGED_REFS.includes(ref);
+}
+
 function diffRefArgs(ref) {
   if (ref === 'worktree' || ref === '') return [];
-  if (ref === '--staged' || ref === 'staged' || ref === '--cached') return ['--cached'];
-  return [ref];
+  if (STAGED_REFS.includes(ref)) return ['--cached'];
+  return ['--end-of-options', ref];
 }
 
 // The real index, when a copy of it can seed the throwaway one. It is git's
@@ -325,7 +341,7 @@ export function repoSnapshot(cwd, diffRef, { everything = false } = {}) {
   let body;
   if (everything) {
     const base = diffRef === 'worktree' ? 'HEAD' : diffRef;
-    const r = withTempIndex(cwd, (run) => ({ body: run(['diff', '--cached', base]), stat: run(['diff', '--cached', '--stat', base]) }), seed);
+    const r = withTempIndex(cwd, (run) => ({ body: run(['diff', '--cached', '--end-of-options', base]), stat: run(['diff', '--cached', '--stat', '--end-of-options', base]) }), seed);
     if (!r || r.body === null) return snap;
     body = r.body;
     snap.diffStat = r.stat;

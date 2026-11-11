@@ -722,7 +722,10 @@ How a session is claimed: every launch that carries a prompt starts it with
 `magi-spawn:<uuid>`, and a candidate is claimed only when the first human
 message of its own record begins with that marker; nothing is claimed for
 being new. A Codex tab launch carries the same prompt as its `[PROMPT]`
-positional, so it is claimed the same way. Recovery with `--resume` assigns
+positional, so it is claimed the same way. Every `;` in a tab's arguments is
+written `\;`: Windows Terminal reads a bare one as the start of another `wt`
+command, which cut the prompt at its first (checked against `wt` on Windows
+11, 2026-11-10). Recovery with `--resume` assigns
 `--name` to a claimed Codex thread (replacing whatever title the app gave
 it) after checking no other thread in the directory holds that name.
 
@@ -870,7 +873,8 @@ Steer; the delivery modes are PROTOCOL: Delivery.
 - **Target a specific session**: `peer: "<session name>"`. A name that matches
   no live session is refused with the listed names, the close ones first.
 - **Pin the artifact under review**: `diffRef: "HEAD~1..HEAD"`, `"--staged"`, or
-  `"worktree"`.
+  `"worktree"`. Any other value starting with `-` is refused: it is a
+  revision or range, never a git option.
 
 ## Keeping queued status updates current
 

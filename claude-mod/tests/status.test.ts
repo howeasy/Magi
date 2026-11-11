@@ -121,6 +121,13 @@ describe('the deck in words', () => {
     // Another session's mod sees both cards as someone else's.
     expect(statusLine(printed(), false, 'sess-other')).toBe('Magi: claude – · codex off · omp – · 1 in Gen 2 Boogaloo · 1 in Magi Git repo · 1 question for claude · 1 reply for claude to check')
     expect(statusLine({ ...printed(), cardsTotal: 7 }, false, 'sess-here')).toContain('4 more open')
+    // A question on a card codex or omp opened is that harness's to answer, not "for claude".
+    const base = printed()
+    const asked = base.cards.find(card => card.turn === 'orchestrator')
+    if (!asked) throw new Error('the fixture has a waiting question')
+    const theirs = { ...base, cards: base.cards.map(card => (card === asked ? { ...card, from: 'codex', to: 'omp' } : card)) }
+    expect(statusLine(theirs, false, 'sess-here')).not.toContain('question')
+    expect(statusLine({ ...theirs, cards: [...theirs.cards, asked] }, false, 'sess-here')).toContain('1 question for claude')
     expect(statusLine(null)).toBe('Magi: checking…')
     expect(statusLine(null, true)).toBe('Magi: status unavailable (see /magi)')
     const quiet = { ...printed(), units: printed().units.map(unit => ({ ...unit, sessions: 1, state: 'standby' as const })), cards: [], cardsTotal: 0, unreconciled: 0 }

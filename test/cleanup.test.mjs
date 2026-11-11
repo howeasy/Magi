@@ -15,19 +15,19 @@ test('every temporary folder a test makes lands under this process\'s own root, 
   assert.ok(process.env.MAGI_HOME.startsWith(tmpdir()), 'the isolated home is inside it too');
 });
 
-test('the sweep removes the roots of ended test processes and stale legacy folders, and nothing else', () => {
+test('the sweep removes the roots of ended test processes, and nothing else', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sweep-'));
   const ended = join(dir, 'magi-test-run-999999999-abc');
   const running = join(dir, `magi-test-run-${process.pid}-def`);
-  const legacyOld = join(dir, 'cx-old123');
-  const legacyNew = join(dir, 'cx-new456');
-  const other = join(dir, 'someone-else');
-  for (const path of [ended, running, legacyOld, legacyNew, other]) mkdirSync(join(path, 'inside'), { recursive: true });
+  // Names another program may own, however old: a short prefix proves nothing.
+  const others = ['cx-old123', 'cx-freeze-build', 'magi-store-backup', 'magi-auto-save', 'magi-test-run-notapid', 'someone-else'].map((name) => join(dir, name));
+  for (const path of [ended, running, ...others]) mkdirSync(join(path, 'inside'), { recursive: true });
+  writeFileSync(join(dir, 'cx-notes.txt'), 'kept');
   const twoDaysAgo = new Date(Date.now() - 2 * 86400000);
-  for (const path of [legacyOld, other]) utimesSync(path, twoDaysAgo, twoDaysAgo);
+  for (const path of [...others, join(dir, 'cx-notes.txt')]) utimesSync(path, twoDaysAgo, twoDaysAgo);
 
-  assert.equal(sweepTemp(dir), 2);
-  assert.deepEqual(readdirSync(dir).sort(), [basename(running), basename(legacyNew), basename(other)].sort());
+  assert.equal(sweepTemp(dir), 1);
+  assert.deepEqual(readdirSync(dir).sort(), [basename(running), ...others.map((p) => basename(p)), 'cx-notes.txt'].sort());
 });
 
 test('a server start removes Magi\'s own temp leftovers older than a day and keeps newer ones and others', async () => {

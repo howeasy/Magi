@@ -726,6 +726,31 @@ describe('the deck', () => {
     }
   })
 
+  // What `magi status --json` really prints for a failed delivery: the round
+  // is closed, so the card is in `failures` and not among the open `cards`.
+  test('an alert for a delivery that closed its card opens the deck with that card\'s messages under Your move', async ($, on) => {
+    const failures = [{ taskId: 'magi-cccc0001', from: 'claude', to: 'codex', code: 'NO_LIVE_PEER', at: 59 * MINUTE, coordinatorIds: ['sess-here'] }]
+    const w = world(on, ran(JSON.stringify({ ...CALM, failures })))
+    await $.session.start(START)
+    await w.clock.settle()
+    for (const surface of SURFACES) {
+      w.opened.length = 0
+      const band = await $.ui.mount({ plugin: 'magi-view', surface, ...BUSY })
+      await band.press({ key: 'failed-magi-cccc0001-codex' })
+      await w.clock.settle()
+      expect(w.opened, surface).toHaveLength(1)
+      expect(w.runs.some(argv => argv.join(' ').endsWith('exchange magi-cccc0001 --json')), surface).toBe(true)
+      await band.unmount()
+      const ui = await $.ui.mount({ plugin: 'magi-view', surface, ...deck(120) })
+      // The card is in no Working block, so its conversation is drawn once, under Your move.
+      expect((await ui.findAll({ type: 'Markdown' })).map(m => String(m.props.text)), surface).toContain(LONG_REPLY)
+      expect(await ui.findAll({ type: 'Markdown' }), surface).toHaveLength(2)
+      await ui.press({ key: 'close-working-magi-cccc0001' })
+      expect(await ui.find({ type: 'Markdown' }), surface).toBeUndefined()
+      await ui.unmount()
+    }
+  })
+
   test('mid-turn, a card simply working is in the deck, not above the prompt', async ($, on) => {
     const w = world(on, ran(JSON.stringify(CALM)))
     for (const surface of SURFACES) {

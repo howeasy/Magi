@@ -371,7 +371,10 @@ open on a channel so a note on the card reaches it while it works; see
 [A headless worker on a channel](#a-headless-worker-takes-notes)). That
 loses session context but uses the harness-specific restrictions in
 [security.md](security.md), not a universal OS sandbox. Callers can force
-either path with `delivery: "live" | "headless"`.
+either path with `delivery: "live" | "headless"`. A request that falls back
+after its live attempt releases the waiter that attempt reserved, so a
+background headless reply is sent home rather than held for a waiter that
+never polls.
 
 ## Knowing who a peer is
 
@@ -568,6 +571,9 @@ on success and failure. Execution tracks children independently of ledger rows;
 server exit, SIGTERM and stdin closure kill them. POSIX `runCli` children own
 detached process groups; cancellation and timeout kill the group. Windows uses
 `taskkill /T /F`. stdout/stderr have separate UTF-8 decoders, flushed on close.
+A descendant that inherited the pipes can outlive the child and a tree kill, so
+`runCli`, like `spawnChannel`, closes them two seconds after the child exits
+(`EXIT_DRAIN_MS`): a run that exited 0 is never reported as a timeout.
 
 **Dispatch certainty.** A failed target lookup never opens a round. A live
 dispatch failure explicitly marked `dispatchUncertain: false` rolls back only
@@ -575,7 +581,9 @@ its new round and restores the prior cap and peer route; it preserves replies
 or clarifications that raced the failure, including late answers to older
 rounds. After the Claude user-frame write or Codex steer `tools/call` write is
 attempted, errors are marked `dispatchUncertain: true`, including timeout,
-stream/exit and tool-result errors. These errors, and errors with unknown
+stream/exit and tool-result errors. A `codex queue` run that was started and
+then timed out, was cancelled or overflowed is marked the same way: it may
+have written its row first. These errors, and errors with unknown
 dispatch certainty, keep a closed round and its reply route. They do not
 justify resending or headless fallback. Headless fallback likewise requires an
 adapter-marked fallback error with explicit `dispatchUncertain: false`; a
@@ -1402,7 +1410,10 @@ event. Magi reports `heartbeatStale` without treating age alone as proof of
 exit. It requires the row's `processStartedAt` to match the current OS
 process birth marker: Windows UTC StartTime ticks, Linux boot id plus
 `/proc/<pid>/stat` start ticks, or the platform's `ps lstart` marker.
-Missing, unreadable or mismatched birth identity is not a live route. Old
+Missing, unreadable or mismatched birth identity is not a live route. A
+marker that could not be read just now (a PowerShell or `ps` timeout) leaves
+the row in place for the next read; only an exited or mismatched process's
+row is removed. Old
 extension rows require `magi install --omp` and a harness restart; the
 installer copies the process-identity helper beside the extension. These new
 platform queries still require runtime verification. Shutdown cancels
@@ -1434,7 +1445,9 @@ Codex (`--as codex`) and omp itself (`--as omp`) as `omp_peer`. Live delivery
 is the same inbox: a request lands in a distinct omp session as a user turn,
 an aside when it is busy, a steer on request. The omp peer answers through
 the tool named in its request: `claude_peer`, `codex_peer` or `omp_peer`
-according to the orchestrator. Each runs `--as omp`; the ledger routes the
+according to the orchestrator. A Claude or Codex worker on a card omp
+orchestrates is likewise told `omp_peer`, the only tool its server accepts
+that card's notes on. Each runs `--as omp`; the ledger routes the
 reply by the task's recorded origin and checks the caller's role. Headless is `omp
 --mode rpc --no-ui` with the prompt sent on stdin as an rpc command (argv is
 too small for a diff on Windows), held open so a note reaches it
@@ -1694,7 +1707,9 @@ each:
 - **Your move** (`yourMove`): what waits on this session's orchestrator: a
   question on one of its cards, a failed delivery, the replies it owes an
   outcome against the limit of three past which new cards are refused; one
-  dim line with nothing waiting.
+  dim line with nothing waiting. A failed delivery closed its round, so its
+  card is in no Working block: opened from its alert, its whole conversation
+  is drawn here, under the rows, on every surface.
 - **Units**: the triad on a vector surface; three equal boxes from 66
   columns in the terminal, a line each below. A unit's mark beats while a
   card is in flight to it, inside its own box, so it lines up by construction.
@@ -1938,7 +1953,9 @@ Memory also holds each closed card's summary before its exchange is trimmed
 `src/store.mjs` opens it through `node:sqlite`, with WAL and full synchronous
 commits. Connection setup waits up to 2 seconds for busy writers;
 ordinary mutations wait 25 ms, then return `LEDGER_BUSY` so `retryState` can
-back off without monopolising the event loop. Every Magi server is a separate
+back off without monopolising the event loop. A record write made outside a
+transaction (`setRecord`, `removeRecord`) says the same, never SQLite's bare
+`database is locked`. Every Magi server is a separate
 process; SQLite transactions serialize writes and survive a dead writer.
 `withStateLock` means a SQLite transaction, with savepoints for nested calls;
 there is no bakery lock or `.waiting` file. Reply publication and the
@@ -2021,9 +2038,10 @@ The test suite keeps the system temp folder clean the same way.
 the runner), points `TMP`, `TEMP` and `TMPDIR` at a root named for that
 process, `magi-test-run-<pid>-*`, and removes it at exit when it can (on
 Windows the process's own open `magi.db` can hold it). `sweepTemp` in
-`test/helpers/temp-sweep.mjs` removes every root whose process has ended,
-and the names the suite used before (`cx-*`, `magi-confirm-*` and the like)
-once two hours old; it runs as each test process starts and as `npm test`'s
+`test/helpers/temp-sweep.mjs` removes every root whose process has ended
+and nothing else (the names the suite used before, `cx-*` and the like, are
+too short to tell from another program's folders, so they are left to the
+operating system); it runs as each test process starts and as `npm test`'s
 `posttest` step, and uses `rmSync`, which also clears the read-only flag git
 puts on its object files. Before this, every run left a few thousand
 folders; 2026-10-12 found 87,000 in `%TEMP%`, and a run left none after.
@@ -2105,7 +2123,9 @@ the user's profile.
 the stat and the hash in the request and in the reply footer. Both sides are
 then provably talking about the same code. If anything is edited afterwards the
 hash changes, which is the signal to review the new diff rather than the stale
-one. `magi diff-hash [ref]` prints the current hash.
+one. `magi diff-hash [ref]` prints the current hash. A `diffRef` shaped like
+a git option (`--output=<file>`) is refused with `BAD_REQUEST`, and git is
+given the ref after `--end-of-options`, so it is only ever read as a revision.
 
 A diff hash is not a whole-project identity: an empty diff hashes to the
 SHA-256 of the empty string whatever the tree holds, and untracked files are

@@ -1,5 +1,5 @@
 // Direction-agnostic engine. Each server supplies its own delivery adapters.
-import { MODES, PROTOCOL, composeRequest, composeReply, composeNote, composeWatch, composeQuestion, composeClarification, newTaskId, parseReply, parseClaims, repoSnapshot, redact, redactValue } from './protocol.mjs';
+import { MODES, PROTOCOL, optionShapedRef, composeRequest, composeReply, composeNote, composeWatch, composeQuestion, composeClarification, newTaskId, parseReply, parseClaims, repoSnapshot, redact, redactValue } from './protocol.mjs';
 import { digestFor, markMemoriesSent, remember as memRemember, recall as memRecall, forget as memForget, rememberOutcome } from './memory.mjs';
 import {
   openRound,
@@ -57,6 +57,13 @@ import { hostname } from 'node:os';
 
 export const DEFAULT_TIMEOUT_MS = 2400000; // 40 min: these are intensive coding sessions
 export const MAX_TIMEOUT_MS = 3600000; // 60 min hard cap
+// What a request without timeoutMs gets: the operator's MAGI_TIMEOUT_MS when
+// it is set (docs/install.md), else the 40 minutes above. Read per request;
+// a value that is not a number fails the check each caller already makes.
+export function defaultTimeoutMs() {
+  const set = (process.env.MAGI_TIMEOUT_MS ?? '').trim();
+  return set ? Number(set) : DEFAULT_TIMEOUT_MS;
+}
 const FRAME_REFRESH_TURNS = 10;
 const FRAME_REFRESH_MS = 2 * 60 * 60 * 1000;
 
@@ -209,9 +216,11 @@ export function makeEngine(cfg) {
     // reply reaches the orchestrator the way a live peer's does. timeoutMs
     // limits execution or the live reply wait, not setup/delivery.
     let wait = a.wait ?? spec.wait;
-    const timeoutMs = Math.min(a.timeoutMs ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
+    const timeoutMs = Math.min(a.timeoutMs ?? defaultTimeoutMs(), MAX_TIMEOUT_MS);
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-      return toolError(new BridgeError('BAD_REQUEST', 'timeoutMs must be a positive finite number.'));
+      return toolError(new BridgeError('BAD_REQUEST', a.timeoutMs === undefined
+        ? `MAGI_TIMEOUT_MS on this Magi server is "${process.env.MAGI_TIMEOUT_MS}", not a positive number of milliseconds. Pass timeoutMs on the request, or have the operator fix the variable and restart the harness.`
+        : 'timeoutMs must be a positive finite number.'));
     }
     const refused = cfg.refuseRequest?.(a);
     if (refused) return toolError(refused);
@@ -303,6 +312,13 @@ export function makeEngine(cfg) {
       if (a.persist) return toolError(new BridgeError('BAD_REQUEST', `persist is not available on a remote worker yet. Drop persist; continue the card with taskId to keep the worker's context.`));
     }
 
+    // diffRef reaches `git diff` as an argument: one shaped like an option
+    // (`--output=<file>` writes a file) is refused, never passed on.
+    for (const ref of [a.diffRef, a.bakeoff?.base]) {
+      if (optionShapedRef(ref)) {
+        return toolError(new BridgeError('BAD_REQUEST', `diffRef "${ref}" looks like a git option, not a revision. Use a commit or range (HEAD~1..HEAD), "--staged", or "worktree".`));
+      }
+    }
     // The artifact is fixed before the round opens, so the ledger can say what
     // each round was about when a reply arrives late.
     const snapshot = repoSnapshot(cwd, a.diffRef);
@@ -610,6 +626,11 @@ export function makeEngine(cfg) {
           // answer to (no live session, or one that is unreachable).
           if (continuingLive || (a.delivery ?? 'auto') !== 'auto' || !e.fallback || e.dispatchUncertain !== false) throw e;
           fellBack = true;
+          // The waiter reserved for the live attempt has no deadline and would
+          // hold a background headless reply in the mailbox for the life of
+          // this server (claimReplyDelivery defers to any waiter). An inline
+          // run returns its reply itself and needs none either.
+          if (wait) await retryState(() => clearWaiting(taskId, round));
           maxRounds = opened.maxRounds;
           // A fresh worker has not received the failed live target's digest.
           memoryItems = [];
@@ -1562,7 +1583,8 @@ export function makeEngine(cfg) {
       return toolError(e, 'clarify_answer');
     }
     let resumeWait = false;
-    const timeoutMs = Math.min(a.timeoutMs ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
+    const fallbackMs = defaultTimeoutMs();
+    const timeoutMs = Math.min(a.timeoutMs ?? (Number.isFinite(fallbackMs) && fallbackMs > 0 ? fallbackMs : DEFAULT_TIMEOUT_MS), MAX_TIMEOUT_MS);
     const questionRound = rec.rounds.find((entry) => entry.round === question.round);
     let target = questionRound && Object.hasOwn(questionRound, 'peerTarget') ? questionRound.peerTarget : rec.peerTarget;
     const cwd = rec.cwd || process.cwd();

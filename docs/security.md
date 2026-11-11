@@ -261,8 +261,10 @@ Only the composed request leaves the orchestrator. Never the transcript,
 never files the peer was not pointed at. Outgoing text is scanned for common
 secret shapes and redacted, with a count of redactions appended. `redact` in
 `src/protocol.mjs` holds the patterns: OpenAI-style `sk-` and Stripe
-`sk_live_` keys, Google `AIza` keys, JWTs, GitHub tokens, AWS access keys,
-Slack tokens, bearer tokens, private key blocks, credentials in URLs, and
+`sk_live_` keys, Google `AIza` keys, JWTs, GitHub tokens (classic and
+fine-grained `github_pat_`), GitLab `glpat-` and npm `npm_` tokens, AWS access
+key ids and `SECRET_ACCESS_KEY` values, Slack tokens, bearer and basic
+`Authorization` values, private key blocks, credentials in URLs, and
 `password`, `passwd`, `secret`, `api_key` or `token` assignments, quoted or
 bare. A bare assignment on a source declaration line whose value is an
 expression (`const token = getToken()`) stays readable.
