@@ -1,7 +1,7 @@
 // Registration for both harnesses, plus a health check.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, cpSync, rmSync, renameSync, openSync, closeSync, fsyncSync, statSync, realpathSync, accessSync, constants } from 'node:fs';
 import { homedir, platform, tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
@@ -190,14 +190,27 @@ function assertEditableToml(text) {
 
 function splitOwned(text, keepOwned) {
   assertEditableToml(text);
+  const lines = text.split(/(?<=\n)/);
+  const isHeader = (line) => /^\s*\[/.test(line);
   let owned = false;
-  return text.split(/(?<=\n)/).filter((line) => {
-    if (/^\s*\[/.test(line)) {
+  const flags = lines.map((line) => {
+    if (isHeader(line)) {
       const header = tableHeader(line);
       owned = Boolean(header && !header.array && header.keys[0] === 'mcp_servers' && OWNED_NAMES.includes(header.keys[1]));
     }
-    return owned === keepOwned;
-  }).join('');
+    return owned;
+  });
+  // A comment block directly above someone else's table describes that table,
+  // not the owned one it happens to follow: it goes with its header. Blank
+  // lines before the comment stay with the owned table, so removing and
+  // re-adding it never grows the file.
+  for (let i = 1; i < lines.length; i++) {
+    if (!isHeader(lines[i]) || flags[i]) continue;
+    let first = -1;
+    for (let j = i - 1; j >= 0 && flags[j] && /^(#.*)?$/.test(lines[j].trim()); j--) if (lines[j].trim().startsWith('#')) first = j;
+    if (first >= 0) flags.fill(false, first, i);
+  }
+  return lines.filter((_, i) => flags[i] === keepOwned).join('');
 }
 
 export function withoutMagiConfig(text) {
@@ -296,8 +309,9 @@ export function foreignEnv(env) {
     .filter(([key, value]) => !OWNED_ENV.has(key) && typeof value === 'string'));
 }
 
-// The basic-string keys of a Codex [mcp_servers.<name>.env] table; other
-// value forms are not ones Magi or a script would write, and are skipped.
+// The string keys (basic or literal) of a Codex [mcp_servers.<name>.env]
+// table; other value forms are not ones Magi or a script would write, and
+// are skipped.
 export function tomlEnv(text, name = 'magi') {
   let inEnv = false;
   const env = {};
@@ -307,8 +321,11 @@ export function tomlEnv(text, name = 'magi') {
       inEnv = Boolean(header && !header.array && header.keys.join('.') === `mcp_servers.${name}.env`);
       continue;
     }
-    const m = inEnv && /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*("(?:[^"\\]|\\.)*")\s*(?:#.*)?$/.exec(row);
-    if (m) try { env[m[1]] = JSON.parse(m[2]); } catch { /* not a basic string */ }
+    const m = inEnv && /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*("(?:[^"\\]|\\.)*"|'[^']*')\s*(?:#.*)?$/.exec(row);
+    // A literal string ('...') has no escapes: the natural way to write a
+    // Windows path or MAGI_WORKER_WRAPPER's JSON array. It is rewritten as a
+    // basic string with the same value.
+    if (m) try { env[m[1]] = m[2].startsWith("'") ? m[2].slice(1, -1) : JSON.parse(m[2]); } catch { /* not a basic string */ }
   }
   return env;
 }
@@ -564,8 +581,10 @@ function installCodexMcp({ omp = false, bins = pinnedBins() } = {}) {
   const removed = withoutMagiConfig(text);
   const had = removed !== text;
   text = removed;
-  const sep = text.length === 0 ? '' : text.endsWith('\n') ? '\n' : '\n\n';
-  atomicConfigWrite(path, text + sep + tomlSection({ omp, bins, keep }));
+  // The file's own line ending, so a CRLF config does not come back mixed.
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const sep = text.length === 0 ? '' : text.endsWith('\n') ? eol : eol + eol;
+  atomicConfigWrite(path, text + sep + tomlSection({ omp, bins, keep }).replace(/\r?\n/g, eol));
   console.log(`${had ? 'Updated' : 'Added'} [mcp_servers.magi]${omp ? ' (claude and omp in one server)' : ''} in ${path}`);
 }
 
@@ -643,19 +662,38 @@ async function uninstallClaudeView() {
 
 export async function uninstall() {
   await uninstallClaudeView();
+  // A config this cannot edit safely is left as it is and reported at the
+  // end: it must not stop the rest of the removal half-way.
+  const refused = [];
+  const step = (action) => { try { action(); } catch (e) { refused.push(e); } };
   const claudePath = claudeUserConfig();
-  if (existsSync(claudePath)) {
+  step(() => {
+    if (!existsSync(claudePath)) return;
     const doc = readJsonConfig(claudePath);
     if (doc.mcpServers) for (const name of OWNED_NAMES) delete doc.mcpServers[name];
     atomicConfigWrite(claudePath, JSON.stringify(doc, null, 2) + '\n');
     console.log(`Removed Magi user MCP entries from ${claudePath}`);
-  }
+  });
   const path = join(codexHome(), 'config.toml');
-  if (existsSync(path)) {
+  step(() => {
+    if (!existsSync(path)) return;
     const text = readFileSync(path, 'utf-8');
     atomicConfigWrite(path, withoutMagiConfig(text));
     console.log(`Removed Magi MCP tables from ${path}`);
+  });
+  try {
+    uninstallRest();
+  } finally {
+    // The first refusal is the error; it names its file and what to do.
+    if (refused.length) {
+      const [first] = refused;
+      first.message += ' Everything else Magi installed was removed; remove the Magi entry from that file by hand (docs/uninstall.md).';
+      throw first;
+    }
   }
+}
+
+function uninstallRest() {
   for (const d of [
     join(claudeConfigDir(), 'skills', 'peer-codex'), join(homedir(), '.agents', 'skills', 'peer-claude'),
     ...[join(claudeConfigDir(), 'skills'), join(homedir(), '.agents', 'skills')].flatMap((skills) => OMP_SKILLS.map((name) => join(skills, name))),
@@ -667,11 +705,14 @@ export async function uninstall() {
       /* nothing there */
     }
   }
-  uninstallOmp();
   try {
-    uninstallUsage();
+    uninstallOmp();
   } finally {
-    removeStaleStartup();
+    try {
+      uninstallUsage();
+    } finally {
+      removeStaleStartup();
+    }
   }
 }
 
@@ -852,6 +893,20 @@ export async function doctorReport() {
     }
     const set = Number(/^\s*tool_timeout_sec\s*=\s*(\d+)\s*(?:#.*)?$/m.exec(rootTable)?.[1]);
     line(set >= need, `codex tool_timeout_sec=${Number.isFinite(set) ? set : 'unset'} covers the ${need}s maximum wait (re-run install if not)`);
+    let script = null;
+    try { script = JSON.parse(/^\s*args\s*=\s*\[\s*("(?:[^"\\]|\\.)*")/m.exec(rootTable)?.[1] ?? 'null'); } catch { /* not a basic string: nothing to check */ }
+    registeredScript('codex [mcp_servers.magi]', script);
+  }
+
+  // A registration is only a path. After the checkout moves, both tables are
+  // still there and every harness fails to start its server.
+  function registeredScript(where, script) {
+    // Only the shape install writes (node <checkout>/bin/magi.mjs serve ...);
+    // a hand-made entry that runs something else is not judged here.
+    if (typeof script !== 'string' || !/magi\.mjs$/i.test(script)) return;
+    if (!existsSync(script)) line(false, `${where} runs ${script}, which does not exist (the checkout moved or was deleted). Run "magi install" from the current checkout, then restart the harnesses.`);
+    else if (resolve(script) !== resolve(CLI)) warn(`${where} runs ${script}, not this checkout's ${CLI}: the harnesses load that copy, whatever this one says. Run "magi install" here to switch.`);
+    else line(true, `${where} runs this checkout's CLI`);
   }
 
   let claudeServers = {};
@@ -859,6 +914,7 @@ export async function doctorReport() {
     try { claudeServers = readJsonConfig(claudeUserConfig()).mcpServers ?? {}; }
     catch (e) { line(false, `claude user config: ${e.code ?? 'BAD_CONFIG'}; ${e.message}`); }
     line(Boolean(claudeServers.magi), `claude magi MCP registration in user config (${claudeUserConfig()}; re-run install --claude if missing)`);
+    registeredScript('claude mcpServers.magi', claudeServers.magi?.args?.[0]);
 
     // A bypass-class receiver holds peer messages unless inbound policy accepts
     // them; its dialog expiry is reported separately, including the never case.

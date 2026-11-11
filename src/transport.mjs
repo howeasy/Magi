@@ -38,10 +38,15 @@ function alive(pid) {
   }
 }
 
-// A bridge's launch ancestry is immutable; registry contents are not.
+// A bridge's launch ancestry is immutable; registry contents are not. Only a
+// completed walk is kept: one that failed (a PowerShell timeout) is tried
+// again, or a bridge behind a shim would never find its session.
 let cachedCallerAncestors;
 function callerAncestors() {
-  return cachedCallerAncestors ??= discoverCallerAncestors();
+  if (cachedCallerAncestors) return cachedCallerAncestors;
+  const walk = discoverCallerAncestors();
+  if (walk.complete) cachedCallerAncestors = walk.pids;
+  return walk.pids;
 }
 
 // The nearest registry ancestor owns a stdio server, even behind a CLI shim.
@@ -51,17 +56,18 @@ function discoverCallerAncestors() {
     try {
       const script = `$rows=Get-CimInstance Win32_Process; $n=${first}; $seen=@{}; while ($n -gt 0 -and !$seen.ContainsKey($n)) { $n; $seen[$n]=$true; $r=$rows | Where-Object ProcessId -eq $n | Select-Object -First 1; if (!$r) { break }; $n=[int]$r.ParentProcessId }`;
       const rows = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', timeout: 5000, windowsHide: true });
-      return [...new Set([first, ...rows.trim().split(/\s+/).map(Number).filter((pid) => pid > 0)])];
-    } catch { return [first]; }
+      return { pids: [...new Set([first, ...rows.trim().split(/\s+/).map(Number).filter((pid) => pid > 0)])], complete: true };
+    } catch { return { pids: [first], complete: false }; }
   }
   const out = [];
   let pid = first;
+  let complete = true;
   while (pid > 0 && !out.includes(pid)) {
     out.push(pid);
     try { pid = Number(execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)], { encoding: 'utf8', timeout: 1000 }).trim()); }
-    catch { break; }
+    catch { complete = false; break; }
   }
-  return out;
+  return { pids: out, complete };
 }
 
 // Each session publishes <pid>.json plus a sibling <pid>.<64hex>.key holding the
@@ -937,6 +943,9 @@ export async function deliverToCodex({ thread, text, recoverClientId = true }) {
         { code: 'NO_LIVE_PEER', fallback: true, dispatchUncertain: false },
       );
     }
+    // `codex queue` was started and then stopped here: it may have written
+    // its row first, so a reply must not become eligible for a second send.
+    if (['TIMEOUT', 'CANCELLED', 'OUTPUT_TOO_LARGE'].includes(e.code) && e.dispatchUncertain === undefined) e.dispatchUncertain = true;
     throw e;
   }
 }
@@ -1234,7 +1243,10 @@ export function listAgentSessions(agent, { includeDead = false, includeHelpers =
       // An exited process, mismatched birth marker or unverifiable legacy row
       // cannot own an inbox. A running extension will republish its own row.
       if (!includeDead) {
-        try { removeRecord(magiHome(), 'agents', row.key); } catch { /* another reader got it */ }
+        // A birth time that could not be read just now proves nothing: the
+        // session is left out of this listing, and its row is kept for the next.
+        const unreadable = running && typeof d.processStartedAt === 'string' && birth === null;
+        if (!unreadable) try { removeRecord(magiHome(), 'agents', row.key); } catch { /* another reader got it */ }
         continue;
       }
     }
@@ -1422,7 +1434,7 @@ export async function deliverTo(target, text, { sender, deliverAs, steer = false
   const live = listAgentSessions(target.agent, { includeHelpers: true }).find((s) => ids.length
     ? [s.sessionId, ...s.sessionAliases].some((id) => ids.includes(id))
     : s.pid === target.pid && (!target.processStartedAt || s.processStartedAt === target.processStartedAt));
-  if (!live) throw Object.assign(new Error(`The originating ${target.agent} session has exited; the reply stays in the mailbox.`), { code: 'NO_REPLY_ROUTE' });
+  if (!live) throw Object.assign(new Error(`The originating ${target.agent} session has exited, or its process could not be verified just now; the reply stays in the mailbox (\`magi mail\`).`), { code: 'NO_REPLY_ROUTE' });
   const marker = `magi-delivery:${randomUUID()}`;
   const sessionFile = live.sessionFile;
   const cursor = deliveryCursor(sessionFile);

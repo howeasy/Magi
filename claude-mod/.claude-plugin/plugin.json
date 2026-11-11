@@ -1,6 +1,6 @@
 {
   "name": "magi-view",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Shows Magi peer traffic in plain words: peer messages as a header line (who sent it, which card, which round) over their body without the protocol text, your own Magi tool calls as one line each with their delivery state, the /magi deck (what waits on you first, the MAGI triad of claude, codex and omp with the cards in flight moving between them, every agent working on a card as a two-line row grouped by the session that asked, the last messages threaded by card, a seven-day ledger by direction, the providers and the machines beyond this one with their workers, drawn in a Nerd Font on the desktop; a message that carried files names them), a line above the prompt only while something needs you, and peer presence on the status line. Drawing only: the stored messages and what the model reads are unchanged.",
   "author": { "name": "Magi" },
   "license": "MIT",

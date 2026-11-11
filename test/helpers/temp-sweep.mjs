@@ -1,7 +1,7 @@
 // Removes what test runs left in the system temp folder. Shared by
 // isolated-home.mjs (every test process, at start) and `npm test`'s posttest
 // step (after the suite, when no test process holds a file any more).
-import { readdirSync, rmSync, statSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -19,10 +19,10 @@ export const RUN_PREFIX = 'magi-test-run-';
  */
 export const testTempBase = () => (process.platform === 'darwin' ? '/private/tmp' : tmpdir());
 const RUN = /^magi-test-run-(\d+)-/;
-// Names the suite used before it kept to one root per process. No pid to
-// ask, so they go once two hours old: no run takes that long.
-const LEGACY = /^(cx-|magi-test-home-|magi-confirm-|magi-codex-confirm-|magi-store-|magi-sandbox-profile-|magi-decoy-profile-|magi-identity-state-|magi-auto-|magi-test-run-(?!\d+-))/;
-const LEGACY_STALE_MS = 2 * 60 * 60 * 1000;
+// Only names that carry a pid are swept. The suite's older names (`cx-*`,
+// `magi-store-*` and the like) were once removed by prefix and age; a prefix
+// that short also matches other programs' folders in the system temp, so
+// those are left to the operating system.
 
 const alive = (pid) => {
   try {
@@ -33,17 +33,16 @@ const alive = (pid) => {
   }
 };
 
-/** Removes the roots of test processes that have ended, and stale legacy folders. Never throws. */
+/** Removes the roots of test processes that have ended, and nothing else. Never throws. */
 export function sweepTemp(dir = testTempBase()) {
   let names;
   try { names = readdirSync(dir); } catch { return 0; }
-  const now = Date.now();
   let removed = 0;
   for (const name of names) {
     const run = RUN.exec(name);
     const path = join(dir, name);
     try {
-      if (run ? !alive(Number(run[1])) : LEGACY.test(name) && now - statSync(path).mtimeMs > LEGACY_STALE_MS) {
+      if (run && !alive(Number(run[1]))) {
         rmSync(path, { recursive: true, force: true });
         removed++;
       }

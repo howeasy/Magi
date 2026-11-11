@@ -36,7 +36,9 @@ export const adapter = {
   display: 'Codex',
   tool: 'codex_peer',
   selfDefault: 'claude',
-  replyTool: () => 'claude_peer',
+  // The tool named for the orchestrator: a Codex session's own server serves
+  // one per peer, and a card note is refused on any other (CARD_FIXED).
+  replyTool: (self) => (self === 'omp' ? 'omp_peer' : 'claude_peer'),
   schema: {
     deliveries: ['auto', 'live', 'headless', 'steer'],
     peerHint: 'Live Codex thread name or id',

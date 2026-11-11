@@ -132,7 +132,12 @@ function ensureProject(cwd) {
 // Windows has no console and silently does nothing.
 function openTab({ title, cwd, cmd }) {
   const [bin, ...args] = cmd;
-  const child = spawnCli('wt', ['-w', WINDOW, 'new-tab', '--title', title, '-d', cwd, resolveBin(bin), ...args], { stdio: 'ignore' });
+  // wt reads an unescaped `;` anywhere in its command line as the start of
+  // another wt command: the bootstrap prompt arrived cut at its first one, and
+  // a model or mode value holding one would run as a command (checked against
+  // wt on Windows 11, 2026-11-10). `\;` is wt's own escape for a literal one.
+  const literal = (arg) => String(arg).replace(/;/g, '\\;');
+  const child = spawnCli('wt', ['-w', WINDOW, 'new-tab', '--title', literal(title), '-d', literal(cwd), literal(resolveBin(bin)), ...args.map(literal)], { stdio: 'ignore' });
   child.unref();
   return `tab "${title}" in the ${WINDOW} window`;
 }

@@ -11,7 +11,9 @@ export const adapter = {
   display: 'Claude Code',
   tool: 'claude_peer',
   selfDefault: 'codex',
-  replyTool: () => 'codex_peer',
+  // The tool named for the orchestrator: a Claude session's own server serves
+  // one per peer, and a card note is refused on any other (CARD_FIXED).
+  replyTool: (self) => (self === 'omp' ? 'omp_peer' : 'codex_peer'),
   schema: { deliveries: ['auto', 'live', 'headless'], peerHint: 'Live Claude session name, id or pid' },
   // Activity comes from the registry; the context size from the transcript
   // tail, or, when the statusline hook is installed, from its JSON, which also

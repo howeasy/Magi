@@ -146,12 +146,18 @@ export function getRecord(home, namespace, key) {
   const row = statement(home, 'SELECT value FROM records WHERE namespace=? AND key=?').get(namespace, key);
   return row ? JSON.parse(row.value) : null;
 }
+// A write made outside transaction() meets the same 25 ms busy window; it
+// says LEDGER_BUSY like one made inside, so retryState retries it and no
+// caller is handed a bare "database is locked".
 export function setRecord(home, namespace, key, value) {
-  statement(home, 'INSERT INTO records(namespace,key,value,updated_at) VALUES(?,?,?,?) ON CONFLICT(namespace,key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at')
-    .run(namespace, key, JSON.stringify(value), Date.now());
+  try {
+    statement(home, 'INSERT INTO records(namespace,key,value,updated_at) VALUES(?,?,?,?) ON CONFLICT(namespace,key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at')
+      .run(namespace, key, JSON.stringify(value), Date.now());
+  } catch (error) { throw translate(error); }
 }
 export function removeRecord(home, namespace, key) {
-  statement(home, 'DELETE FROM records WHERE namespace=? AND key=?').run(namespace, key);
+  try { statement(home, 'DELETE FROM records WHERE namespace=? AND key=?').run(namespace, key); }
+  catch (error) { throw translate(error); }
 }
 export function listRecords(home, namespace) {
   return statement(home, 'SELECT value FROM records WHERE namespace=? ORDER BY key').all(namespace).map((row) => JSON.parse(row.value));

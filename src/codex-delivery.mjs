@@ -44,7 +44,7 @@ export function makeCodexLiveDelivery({ queue = deliverToCodex, steer = steerCod
     let body = text;
     if (body.length > MAX_QUEUE_INLINE) {
       if (!taskId) throw new BridgeError('NOTE_TOO_LARGE', 'An oversized note cannot use the task request-file path.');
-      body = composeSpill({ taskId, round: round ?? args.round, path: putRequestBody(taskId, text), replyTool: 'claude_peer' });
+      body = composeSpill({ taskId, round: round ?? args.round, path: putRequestBody(taskId, text), replyTool: sender?.agent === 'omp' ? 'omp_peer' : 'claude_peer' });
     }
     const identified = sender?.id ?? sender?.sessionId;
     const queueKey = args.queueKey;

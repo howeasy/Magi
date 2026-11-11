@@ -65,7 +65,8 @@ export function statusLine(status: MagiStatus | null, isStale = false, sessionId
   const here = groups.find(group => group.isHere)
   const others = groups.filter(group => !group.isHere)
   const elsewhere = others.slice(2).reduce((n, group) => n + group.cards.length, 0)
-  const questions = status.cards.filter(card => card.turn === 'orchestrator').length
+  // Only this harness's own: a question on a card codex or omp opened is not "for claude".
+  const questions = status.cards.filter(card => card.turn === 'orchestrator' && card.from === status.as).length
   const counts = [
     here ? `${here.cards.length} working here` : '',
     ...others.slice(0, 2).map(group => `${group.cards.length} in ${group.heading.slice(0, 24)}`),

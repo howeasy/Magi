@@ -404,6 +404,11 @@ export function deckTree(t: Table, a: DeckArgs): RenderElement {
       </Box>
     )
   }
+  // A failed delivery closed its round, so Working (open cards only) has no
+  // block to open that card under: opened from its alert, its messages are
+  // drawn here, under the rows, on every surface.
+  const failedOpen = moves.find(row => row.kind === 'failed' && row.taskId !== null && row.taskId === a.view.expanded
+    && !(status?.cards.some(card => card.taskId === row.taskId && card.turn === 'peer') ?? false))
   const movePanel = () =>
     section(
       heading('Your move', 'yourMove', { count: moves.length > 0 ? `${moves.length} waiting` : 'nothing waiting', kanji: KANJI.alert }),
@@ -411,7 +416,8 @@ export function deckTree(t: Table, a: DeckArgs): RenderElement {
         ? image(yourMoveSvg({ rows: moves, width: pxOf(W), style }))
         : moves.length === 0
           ? <Text dimColor>{`${icons.clear} nothing waiting on you`}</Text>
-          : moves.map(moveRow))
+          : moves.map(moveRow),
+      failedOpen?.taskId ? fullMessages(failedOpen.taskId, 'working') : null)
 
   // ---- units: the triad on a vector surface; three boxes over a bus, or a
   // line each when narrow, on the terminal. The mark beats while a card is

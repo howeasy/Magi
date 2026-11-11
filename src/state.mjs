@@ -1388,9 +1388,12 @@ export function sweep(maxAgeMs = 7 * 24 * 60 * 60 * 1000) {
 function closedAt(task) {
   const last = task.rounds?.at(-1);
   if (!last || (!last.replied && !last.closedAt)) return null;
+  // Unchecked replies are not closed cards, whichever round holds one: a later
+  // round that was closed unanswered does not close an earlier answer nobody
+  // gave a verdict on.
+  if (task.rounds.some((r) => r.replied) && !outcomeCovers(task)) return null;
   if (!last.replied) return last.closedAt;
-  if (outcomeCovers(task)) return Math.max(task.outcome.at ?? 0, last.repliedAt ?? 0, last.openedAt ?? 0);
-  return null; // Unchecked replies are not closed cards.
+  return Math.max(task.outcome.at ?? 0, last.repliedAt ?? 0, last.openedAt ?? 0);
 }
 
 const retentionRuns = new Map();
