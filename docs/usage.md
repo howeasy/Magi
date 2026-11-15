@@ -560,7 +560,9 @@ OMP-to-OMP round trip.
 > Have Codex fact-check this on a specific model (name it as Codex does).
 
 `model` on a request names the model a headless peer runs, passed as the
-harness's own setting (`claude --model` and `omp --model`, checked against
+harness's own setting. An agent leaves it out unless you named one, and looks
+the name up (`omp models find`, `codex debug models`; `skills/PROTOCOL.md`,
+Models) rather than guessing. The pass-through was checked (`claude --model` and `omp --model`, against
 Claude 2.1.263 and omp 18.1.19; Codex's `thread/start`/`thread/resume`
 `model`, not yet run live, where `codex exec -m` was checked against 0.153.4).
 It applies only when the request goes headless: a live session runs whatever

@@ -61,6 +61,9 @@ say what you checked; the docs record versions for that reason.
   need.
 - Comments say why. `// ponytail:` marks a deliberate ceiling and names the
   upgrade path.
+- No agent-facing text (skills, protocol, schema) names a model an agent could copy: models come from
+  a lookup (`skills/PROTOCOL.md`, Models), so an example cannot go stale or be
+  guessed into a failing run.
 - Every error the bridge returns names its code and what to do next; the
   agent reading it has no other feedback.
 - Private formats (the Claude inbox frame, the Codex desktop steer channel,
