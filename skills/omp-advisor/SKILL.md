@@ -50,7 +50,8 @@ omp_peer
 - **A different model, always.** Magi never starts an advisor on the worker's
   own model; the reply names the one that watched. If none differs you get
   `ADVISOR_SAME_MODEL`, `ADVISOR_NO_MODEL` or `ADVISOR_WORKER_UNKNOWN` before any
-  work starts: pass another `model` for the worker, or drop `advisor`.
+  work starts: pass another `model` for the worker, looked up with
+  `omp models find <word>` (PROTOCOL: Models), or drop `advisor`.
 - **Coming back.** The notes the worker received appear under the reply as
   `[magi]` lines, in `advice` on the result, and in `magi exchange <task_id>`.
 - **Silence is not approval.** No notes means nothing worth saying. Reconcile the

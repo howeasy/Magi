@@ -7,7 +7,7 @@ when a case comes up. The mechanisms behind these rules are explained in the
 Magi repository's `docs/architecture.md`.
 
 Contents: The one rule, Roles, When not to call a peer, Turns, Modes, Request
-fields, Delivery, Steer, Who is reachable, Talking, Advisor, Reconciliation,
+fields, Delivery, Models, Steer, Who is reachable, Talking, Advisor, Reconciliation,
 Reporting to the user, Reply format, Independence decays, Two views, Blind
 bake-off, Starting a peer, Shared memory, Notices to the human, Security, If you
 are neither Claude nor Codex.
@@ -75,22 +75,15 @@ taskId (`CARD_FIXED` otherwise). A continuation goes to the recorded worker
 unless `peer` explicitly names another session in that harness. Earlier replies
 still belong to their original worker.
 
-**Framing.** A channel is a coordinator-session / worker-session pair, derived
-from cards. The worker gets the full `PEER REQUEST` preamble once per pair, and
-a `PEER TURN` otherwise: task_id, turn, mode, ask, reply instruction and
-repository changes. The reply instruction is always present; memory already
-delivered to the pair is not repeated. The full frame comes again after 8
-hours, a change of worker, or a detected transcript compaction; where no
-compaction signal exists (Codex, resumed headless workers), after ten delivered
-turns or two hours since the last full frame, whichever comes first. That
-counter spans cards on the pair (full frames at turns 1, 11, 21, ...).
+**Framing.** The worker gets the full `PEER REQUEST` preamble once per
+coordinator/worker pair, then a `PEER TURN` per turn; send only the new ask.
+The full preamble comes again by itself when the worker's context may have
+lost it (`docs/architecture.md`, "Framing").
 
-**Results.** A successful tool result carries the instructions you need in
-`structuredContent.next`, outstanding task ids in `unreconciled`, the delivery
-state in `deliveryStatus` (Delivery), and a reply's raw, redacted `body`, even
-when it has no named sections. This matters on Claude Code: 2.1.290 shows the
-model only `JSON.stringify(structuredContent)` on success, and only text on
-errors. Error text names the code and a recovery step.
+**Results.** Read `structuredContent` first: `next` is what to do now,
+`unreconciled` the task ids still owed an outcome, `deliveryStatus` the
+delivery state (Delivery), `body` a reply's raw, redacted text, even when it
+has no named sections. Error text names the code and a recovery step.
 
 **Turn limits.** A review-style card keeps a loop guard: `maxRounds` defaults to
 2, to 6 for `DEBATE` and `ADVERSARIAL_REVIEW`, hard cap 12. Raise it on a
@@ -231,7 +224,7 @@ a blocking request holds your own call.
 ## Delivery
 
 - **`auto`**: into Codex, queued; an idle session can read it as a new turn,
-  and the 0.160.1 desktop can absorb it mid-turn. Into omp, an aside at its
+  and the desktop can absorb it mid-turn. Into omp, an aside at its
   next step boundary; into Claude, between tool calls, or a new turn when idle.
   Requests fall back to headless when nothing live is reachable; notes and
   replies never do (nor engine-only watches), though a card note reaches a
@@ -240,10 +233,9 @@ a blocking request holds your own call.
   it: Steer.
 - **`headless`**: a fresh peer with no history unless `persist` or
   `resumeThreadId` picks one, so the most independent pass when neither is set;
-  works with no live peer at all. `model` picks what it runs, in the harness's
-  own words (`opus`, `gpt-6-astra`, `openai/gpt-5.2`); a live session keeps
-  whatever its human chose. Headless controls differ by engine; an OS sandbox is
-  not guaranteed (Security).
+  works with no live peer at all. `model` picks what it runs (Models); a live
+  session keeps whatever its human chose. Headless controls differ by engine;
+  an OS sandbox is not guaranteed (Security).
 - **`live`**: force a live peer and error when none is reachable. A Codex queue
   acknowledgement proves the row was written, not that the task is loaded.
 
@@ -264,8 +256,28 @@ completion.
 - `failed`: definite, and returned as an error. Inspect the failed record and
   the receiver before retrying.
 
-Reply and question dispatch never wait on confirmation. Later fleet polls may
-upgrade the channel view from the stored delivery evidence, without resending.
+Reply and question dispatch never wait on confirmation.
+
+## Models
+
+Omit `model`. The peer then runs what its human configured, which is the right
+model unless the user named another, or `ADVISOR_SAME_MODEL` asks for a worker
+on a different one. A name from memory is a guess, and a wrong guess fails the
+run. `model` applies to a headless request and to `spawn`; a live session keeps
+its own.
+
+When a model must be named, look it up on this machine and pass what the
+lookup prints, unchanged:
+
+| Peer | Look up | Pass |
+|---|---|---|
+| omp | `omp models find <word>` (`omp models --json` for all) | the `selector`, `provider/id` |
+| Codex | `codex debug models` | the `slug` |
+| Claude | none needed | `opus`, `sonnet` or `haiku`, or a full model id |
+
+`omp config get modelRoles` shows which model omp uses for each role (default,
+advisor, smol, slow). A lookup that finds nothing means the model is not
+installed or its provider is not signed in: tell the user, and keep the default.
 
 ## Steer
 
@@ -297,10 +309,8 @@ error comes back to you, and a timed-out one may still have landed, so look at
 the peer (`peers`, `transcript`) before you resend. It does not cancel a running
 tool, and acceptance is not proof the peer read it: when a stop matters, ask for
 an acknowledgment and for the state of whatever it was running. On omp a steer
-makes the session read at once while its running tool is parked, not killed:
-with a `bash sleep 30` running (omp 18.1.19) a steer started a turn 0.2 s after
-its frame was written, and the same message as an aside landed 27 s later, while
-the extension polls every 750 ms.
+makes the session read at once while its running tool is parked, not killed;
+an aside waits for the tool to finish.
 
 Across machines, only an explicit Codex steer uses the remote daemon;
 ordinary notes and clarification answers stay queued there.
@@ -439,7 +449,7 @@ request's `model`, else omp's default role; the candidates are the server's
 names the model that watched. When none differs, no advisor starts: an explicit
 `advisor: true` is refused before any work begins, naming a fix
 (`ADVISOR_SAME_MODEL`: add a different model to the list or pass another
-`model`; `ADVISOR_NO_MODEL`: nothing is configured; `ADVISOR_WORKER_UNKNOWN`:
+`model`, looked up as Models says; `ADVISOR_NO_MODEL`: nothing is configured; `ADVISOR_WORKER_UNKNOWN`:
 the worker's model is not known, as when the request resumes a session, so pass
 `model`), while a server default just skips it and says why.
 

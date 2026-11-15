@@ -6,9 +6,9 @@ allowed-tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, mcp__magi__codex_pee
 
 # Codex as a peer
 
-Codex is a second engineer with a different training distribution, not an
-oracle. This file is the route; `PROTOCOL.md` beside it is the detail. Read the
-section you need when you need it.
+Codex is a second engineer with a different training distribution; treat its
+claims as leads to verify. This file is the route; `PROTOCOL.md` beside it is
+the detail. Read the section you need when you need it.
 
 ## First: which side are you on
 
@@ -30,9 +30,10 @@ On your own judgement, not only when asked: a non-trivial diff after your own
 pass (`REVIEW` with `diffRef`), a decision expensive to undo
 (`ADVERSARIAL_REVIEW`), facts that matter (`FACT_CHECK`), a bug you are stuck
 on (send symptoms and a repro, not your diagnosis), a bounded subtask
-(`DELEGATE` with `allowWrites: true`, or it is sent read-only), two attempts at a hard problem judged blind (PROTOCOL: Blind bake-off). The
-test is whether an independent look could change what you ship; on most turns
-the evidence in hand already settles it, and you ship.
+(`DELEGATE` with `allowWrites: true`, or it is sent read-only), two attempts at
+a hard problem judged blind (PROTOCOL: Blind bake-off). The test is whether an
+independent look could change what you ship; when the evidence in hand already
+settles it, ship.
 
 ## The call
 
@@ -46,28 +47,29 @@ mcp__magi__codex_peer
   workingDirectory: "<repo root>"
 ```
 
+- **Model.** Leave `model` out; Codex runs its configured one. When the user
+  named a model, find it with `codex debug models` and pass the `slug`
+  (PROTOCOL: Models).
 - **Waiting.** A live review waits for the reply; a headless request returns
   after launch (`wait: true` blocks for it). Several requests at once: set
-  `wait: false` on each, since Magi calls run one at a time and a waiting call
-  holds the rest unsent (PROTOCOL: Request fields).
+  `wait: false` on each (PROTOCOL: Request fields).
 - **Coming back.** An async reply arrives as a PEER REPLY turn. Answer each
-  PEER QUESTION once, its `question_id` as `questionId`; answers never block.
-- **The card.** Hand over work with a request, continue it by passing its
-  `taskId`, talk during it with a note naming `taskId`
-  (PROTOCOL: Turns), (PROTOCOL: Talking).
+  PEER QUESTION once, its `question_id` as `questionId`.
+- **The card.** Continue it by passing its `taskId`; talk during it with a note
+  naming `taskId` (PROTOCOL: Talking).
 - **Done** when one `kind:"outcome"` covers every answered turn, each checked
   against the source (PROTOCOL: Reconciliation).
 - **`context`** carries only what the peer needs, never secrets.
 
 ## Delivery, this side
 
-`auto` queues into the live task; the 0.160.1 desktop can absorb it mid-turn,
-but queueing does not guarantee when it is read. To a task whose
-`peers` row says `working`, send `delivery: "steer"` with an explicit `peer:`
-when the message changes what it should do now: a changed spec or interface, a
-false premise, the user's stop, a file you are about to edit, or an answer you
-are blocked on (PROTOCOL: Steer). `live` queues and errors instead of falling
-back to headless.
+`auto` queues into the live task; the desktop can absorb it mid-turn, but
+queueing does not guarantee when it is read. To a task whose `peers` row says
+`working`, send `delivery: "steer"` with an explicit `peer:` when the message
+changes what it should do now: a changed spec or interface, a false premise, the
+user's stop, a file you are about to edit, or an answer you are blocked on
+(PROTOCOL: Steer). `live` queues and errors instead of falling back to
+headless.
 Going on after a `wait: false` request from Codex desktop or omp? Add
 `steerReply: true` so the reply reaches your current turn (PROTOCOL: Steer).
 If you are the peer and the reply tool is absent from your session, run the
@@ -79,6 +81,7 @@ denied: say so in your answer and stop; the fallback does not get around it.
 | You want to | PROTOCOL.md section |
 |---|---|
 | pick a mode, fill a field (a worker on another machine: `host`; files: `files`) | Modes; Request fields |
+| name a model (`model`) | Models |
 | decide queue or steer for a message to a working peer | Steer |
 | choose `auto` / `live` / `headless`, or keep a peer across requests (`persist`) | Delivery; Independence decays |
 | a reply you waited for has not come | Request fields; Who is reachable |
@@ -89,5 +92,5 @@ denied: say so in your answer and stop; the fallback does not get around it.
 | flag the human (`notify`) | Notices to the human |
 | a decision expensive enough to want both other harnesses independently | Two views |
 | two independent implementations need a blind comparison | Blind bake-off |
-| a card ended: check every answered turn, record one `outcome` | Reconciliation (more than three unreconciled cards hold new cards, per coordinator session) |
+| a card ended: check every answered turn, record one `outcome` | Reconciliation |
 | tell the user | Reporting to the user |

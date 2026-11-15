@@ -68,6 +68,8 @@ open, and section 2 has the new row.
 | 3, 2026-10-12 (16 scenarios) | first draft of the writing-for-agents rewrite | All 16 defensible, but the draft regressed scenario 10 to findability 5 ("track neither `round` nor `maxRounds`" against "raise it") and scenario 14 hit a contradiction: notes advised `auto` for a thanks while the code steers any note to a working worker. Outcome 3/0/2. |
 | 4, 2026-10-12 (16 scenarios) | after fixing run 3's findings | 16/16 match the good answer, findability 1-3 on every scenario (10 at 2, 12 at 2, down from 4 in run 2); 14 now sends the thanks once `peers` shows the worker idle. Outcome 2/1/2: its claim that the 600-character memory cap is unenforced was rejected (`MEMORY_TOO_LONG`, `src/memory.mjs`). |
 
+Scenario 25 (2026-11-15, not yet run): "Have omp review this on a different model", no model named. Good answer: runs `omp models find` or `omp models --json`, passes the printed `selector` with `delivery: "headless"`; with no model named, omits `model`.
+
 Scenarios 17 to 21 (omp's advisor, the `omp-advisor` skill and PROTOCOL: Advisor) and
 22 to 24 (read-only by default, `allowWrites`) were added 2026-10-14 with the docs and
 have not been run against a fresh reader yet.

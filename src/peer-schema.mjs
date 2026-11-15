@@ -27,7 +27,7 @@ export function peerInputSchema({ deliveries, peerHint, steerHint, queueKey = fa
     peer: z.string().optional().describe(`${peerHint}, as kind:"peers" lists it. transcript: whose conversation to read (default: the one a request would reach)`),
     name: z.string().optional().describe('spawn: the new session\'s name (a-z, 0-9, _ -). Spawn only when the user asked; a request with no live peer goes headless by itself'),
     permissionMode: z.string().optional().describe("spawn: the new session's permission mode, passed as given; omit for its default"),
-    model: z.string().optional().describe("spawn or headless request: the model in its harness's own words; omit for its default. A live session keeps its own"),
+    model: z.string().optional().describe('Omit unless the user named one; then look the name up (PROTOCOL: Models). spawn or headless request only; a live session keeps its own'),
     app: z.boolean().optional().describe('spawn: open in the desktop app, not a terminal; the human sends the prefilled prompt; permissionMode/model ignored'),
     spawnId: z.string().optional().describe('spawn: claim a pending launch by the id it gave; launches nothing'),
     from: z.string().optional().describe('Leave unset'),

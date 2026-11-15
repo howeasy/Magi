@@ -85,7 +85,7 @@ export function chooseAdvisor({ worker, candidates }) {
   }
   const different = usable.filter((c) => !sameModel(c, worker));
   if (!different.length) {
-    return { ok: false, code: 'ADVISOR_SAME_MODEL', message: `Every advisor model available (${usable.map((c) => c.raw).join(', ')}) is the worker's own model (${worker.raw}); an advisor on the same model shares its blind spots, so none was started. Add a different model to ${ADVISOR_MODELS_ENV} or omp's modelRoles.advisor, run the worker on another with model, or drop advisor.` };
+    return { ok: false, code: 'ADVISOR_SAME_MODEL', message: `Every advisor model available (${usable.map((c) => c.raw).join(', ')}) is the worker's own model (${worker.raw}); an advisor on the same model shares its blind spots, so none was started. Add a different model to ${ADVISOR_MODELS_ENV} or omp's modelRoles.advisor, run the worker on another with model (find one with "omp models find <word>" and pass its provider/id), or drop advisor.` };
   }
   const pick = different.find((c) => worker.vendor !== 'unknown' && c.vendor !== 'unknown' && c.vendor !== worker.vendor) ?? different[0];
   return { ok: true, model: pick.raw, vendor: pick.vendor, differentVendor: worker.vendor !== 'unknown' && pick.vendor !== 'unknown' && pick.vendor !== worker.vendor, worker: worker.raw, workerVendor: worker.vendor };
